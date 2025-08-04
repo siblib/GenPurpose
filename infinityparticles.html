@@ -331,8 +331,7 @@
                     spiralAngle: Math.random() * Math.PI * 2,
                     spiralRate: (Math.random() * 0.5 + 0.5),
                     spiralDirection: 1,
-                    rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2),
-                    previousPosition: (options.center || new THREE.Vector3()).clone()
+                    rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2)
                 });
 
             } else if (type === 'sine') {
@@ -350,8 +349,7 @@
                     origin: options.center.clone(),
                     color: options.color,
                     oscillationFrequency: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2),
-                    oscillationAmplitude: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2),
-                    previousPosition: options.center.clone()
+                    oscillationAmplitude: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2)
                 });
             } else if (type === 'celestial') {
                 geometry = new THREE.SphereGeometry(0.6, 16, 16);
@@ -380,8 +378,7 @@
                     curve: curve,
                     pathProgress: 0,
                     pathSpeed: 0.05 + Math.random() * 0.05,
-                    rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2),
-                    previousPosition: options.origin.clone()
+                    rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2)
                 });
             } else {
                 const radius = options.radius || Math.random() * 0.5 + 0.25;
@@ -615,14 +612,13 @@
                         p.markedForRemoval = true;
                     }
                     else {
-                        const oldPosition = p.previousPosition.clone(); // Use the stored previous position
+                        const oldPosition = p.mesh.position.clone();
                         p.spiralAngle += p.spiralRate * delta;
                         const b = 0.3, a = 0.5;
                         const radius = a * Math.exp(b * p.spiralAngle);
                         const point = new THREE.Vector3(radius * Math.cos(p.spiralAngle), radius * Math.sin(p.spiralAngle), 0);
                         point.applyMatrix4(p.rotationMatrix);
                         p.mesh.position.copy(p.spiralCenter).add(point);
-                        p.previousPosition.copy(p.mesh.position); // Update for the next frame
 
                         if (oldPosition.distanceTo(p.mesh.position) > 0) {
                             const trailMaterial = new THREE.LineBasicMaterial({ color: p.color, transparent: true, opacity: 0.25 });
@@ -642,7 +638,7 @@
                         }
                         p.markedForRemoval = true;
                     } else {
-                        const oldPosition = p.previousPosition.clone();
+                        const oldPosition = p.mesh.position.clone();
                         const basePos = p.origin.clone().add(p.direction.clone().multiplyScalar(p.timeAlive * p.speed));
                         const perpendicular = new THREE.Vector3().crossVectors(p.direction, new THREE.Vector3(0, 0, 1)).normalize();
                         const sineOffset = Math.sin(p.timeAlive * p.sineFrequency) * p.sineAmplitude;
@@ -652,7 +648,6 @@
                             Math.sin(elapsedTime * p.oscillationFrequency.z) * p.oscillationAmplitude.z
                         );
                         p.mesh.position.copy(basePos.add(perpendicular.multiplyScalar(sineOffset)).add(oscillationOffset));
-                        p.previousPosition.copy(p.mesh.position);
                         p.mesh.material.opacity = p.life / 5;
 
                         if (oldPosition.distanceTo(p.mesh.position) > 0) {
@@ -669,18 +664,17 @@
                     if (p.life <= 0) {
                         p.markedForRemoval = true;
                     } else {
-                        const oldPosition = p.previousPosition.clone();
+                        const oldPosition = p.mesh.position.clone();
                         p.pathProgress = (p.pathProgress + delta * p.pathSpeed) % 1;
                         const point = p.curve.getPointAt(p.pathProgress);
                         point.applyMatrix4(p.rotationMatrix);
                         p.mesh.position.copy(p.origin).add(point);
-                        p.previousPosition.copy(p.mesh.position);
                         
                         p.mesh.material.opacity = p.life / 20;
 
                         if (oldPosition.distanceTo(p.mesh.position) > 0) {
                             const trailMaterial = new THREE.LineBasicMaterial({ color: p.color, transparent: true, opacity: 0.25 });
-                            const trailGeometry = new THREE.BufferGmetry().setFromPoints([oldPosition, p.mesh.position.clone()]);
+                            const trailGeometry = new THREE.BufferGeometry().setFromPoints([oldPosition, p.mesh.position.clone()]);
                             const trailLine = new THREE.Line(trailGeometry, trailMaterial);
                             const initialLife = 180;
                             dimTrails.push({ line: trailLine, life: initialLife, initialLife });
@@ -812,4 +806,3 @@
     </script>
 </body>
 </html>
-
