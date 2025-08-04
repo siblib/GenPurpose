@@ -186,6 +186,20 @@ class PerformanceLogger {
                 return new THREE.Vector3(x, y, 0);
             }
         }
+
+        class LissajousCurve extends THREE.Curve {
+            constructor(scale = 10, a = 1, b = 3, A = 1, B = 2, delta = Math.PI / 2) {
+                super();
+                this.scale = scale;
+                this.a = a; this.b = b; this.A = A; this.B = B; this.delta = delta;
+            }
+            getPoint(t) {
+                const angle = 2 * Math.PI * t;
+                const x = this.scale * Math.sin(this.a * angle + this.delta);
+                const y = this.scale * Math.sin(this.b * angle);
+                return new THREE.Vector3(x, y, 0);
+            }
+        }
         const curve = new LemniscateCurve(curveScale);
 
         let cameraMode = 'general';
@@ -251,7 +265,7 @@ class PerformanceLogger {
 
                 Object.assign(particle, {
                     mesh,
-                    life: 10 + Math.random() * 10, // Live for 10-20 seconds
+                    life: 3 + Math.random() * 2, // Live for 3-5 seconds
                     direction: new THREE.Vector3().randomDirection(),
                     speed: 5 + Math.random() * 5,
                     sineAmplitude: 1 + Math.random() * 2,
@@ -261,6 +275,40 @@ class PerformanceLogger {
                     // Properties for secondary oscillation
                     oscillationFrequency: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2),
                     oscillationAmplitude: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2)
+                });
+            } else if (type === 'celestial') {
+                geometry = new THREE.SphereGeometry(0.3, 16, 16);
+                material = new THREE.MeshBasicMaterial({ color: options.color || 0xffffff });
+                mesh = new THREE.Mesh(geometry, material);
+
+                const curveType = Math.random() > 0.5 ? 'torusKnot' : 'lissajous';
+                let curve;
+                if (curveType === 'torusKnot') {
+                    curve = new THREE.TorusKnotCurve(
+                        10 + Math.random() * 10, // radius
+                        2 + Math.random() * 4,   // tube
+                        64, 8,                   // tubularSegments, radialSegments
+                        Math.floor(Math.random() * 3) + 2, // p
+                        Math.floor(Math.random() * 5) + 3  // q
+                    );
+                } else {
+                    curve = new LissajousCurve(
+                        15 + Math.random() * 10, // scale
+                        Math.floor(Math.random() * 3) + 1, // a
+                        Math.floor(Math.random() * 4) + 1, // b
+                        1, 1, Math.PI / 2
+                    );
+                }
+                
+                Object.assign(particle, {
+                    mesh,
+                    life: 20 + Math.random() * 10, // Live for 20-30 seconds on new path
+                    origin: options.origin.clone(),
+                    color: options.color,
+                    curve: curve,
+                    pathProgress: 0,
+                    pathSpeed: 0.05 + Math.random() * 0.05,
+                    rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2)
                 });
             } else { // Normal or Oscillator
                 const radius = options.radius || Math.random() * 0.5 + 0.25;
@@ -477,7 +525,8 @@ function createShockwave(position, color) {
                     p.timeAlive += delta;
                     if (p.life <= 0) {
                         createShockwave(p.mesh.position, p.color);
-                        for (let k = 0; k < 3; k++) {
+                        const numToSpawn = 5 + Math.floor(Math.random() * 6); // Random number between 5 and 10
+                        for (let k = 0; k < numToSpawn; k++) {
                             createParticle('sine', { center: p.mesh.position, color: p.color });
                         }
                         p.markedForRemoval = true;
@@ -502,7 +551,21 @@ function createShockwave(position, color) {
                     p.life -= delta;
                     p.timeAlive += delta;
                     if (p.life <= 0) {
-                        p.markedForRemoval = true;
+                        // --- TRANSITION TO CELESTIAL PARTICLE ---
+                        p.type = 'celestial';
+                        p.life = 20 + Math.random() * 10; // New, longer lifespan
+                        p.origin = p.mesh.position.clone(); // Start new path from current location
+                        p.pathProgress = 0;
+                        p.pathSpeed = 0.05 + Math.random() * 0.05;
+
+                        const curveType = Math.random() > 0.5 ? 'torusKnot' : 'lissajous';
+                        if (curveType === 'torusKnot') {
+                            p.curve = new THREE.TorusKnotCurve(15, 3, 100, 16, Math.floor(Math.random() * 3) + 2, Math.floor(Math.random() * 5) + 3);
+                        } else {
+                            p.curve = new LissajousCurve(20, Math.floor(Math.random() * 3) + 1, Math.floor(Math.random() * 4) + 1);
+                        }
+                        p.rotationMatrix = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2);
+
                     } else {
                         const oldPosition = p.mesh.position.clone();
 
@@ -530,6 +593,31 @@ function createShockwave(position, color) {
                             const trailGeometry = new THREE.BufferGeometry().setFromPoints([oldPosition, p.mesh.position.clone()]);
                             const trailLine = new THREE.Line(trailGeometry, trailMaterial);
                             const initialLife = 180; // Same lifespan as Fibonacci trails
+                            dimTrails.push({ line: trailLine, life: initialLife, initialLife });
+                            scene.add(trailLine);
+                        }
+                    }
+                } else if (p.type === 'celestial') {
+                    p.life -= delta;
+                    p.timeAlive += delta;
+                    if (p.life <= 0) {
+                        p.markedForRemoval = true;
+                    } else {
+                        const oldPosition = p.mesh.position.clone();
+                        p.pathProgress = (p.pathProgress + delta * p.pathSpeed) % 1;
+
+                        const point = p.curve.getPointAt(p.pathProgress);
+                        point.applyMatrix4(p.rotationMatrix);
+                        p.mesh.position.copy(p.origin).add(point);
+                        
+                        p.mesh.material.opacity = p.life / 20;
+
+                        // Create the trail
+                        if (oldPosition.distanceTo(p.mesh.position) > 0) {
+                            const trailMaterial = new THREE.LineBasicMaterial({ color: p.color, transparent: true, opacity: 0.25 });
+                            const trailGeometry = new THREE.BufferGeometry().setFromPoints([oldPosition, p.mesh.position.clone()]);
+                            const trailLine = new THREE.Line(trailGeometry, trailMaterial);
+                            const initialLife = 180;
                             dimTrails.push({ line: trailLine, life: initialLife, initialLife });
                             scene.add(trailLine);
                         }
@@ -660,5 +748,6 @@ function createShockwave(position, color) {
     </script>
 </body>
 </html>
+
 
 
