@@ -56,6 +56,22 @@
              margin-top: 15px;
              padding: 10px;
         }
+        #performance-panel {
+            top: 550px; /* Adjust as needed */
+            width: 320px;
+        }
+        #tracking-info {
+            margin-top: 10px;
+            padding: 5px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
+            height: 150px; /* Or adjust as needed */
+            overflow-y: auto;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: pre;
+        }
     </style>
 </head>
 <body>
@@ -85,6 +101,10 @@
         <button id="restartBtn" class="view-btn">Apply & Restart</button>
     </div>
 
+<div id="performance-panel" class="ui-panel">
+        <h4>Real-Time Particle Tracking</h4>
+        <div id="tracking-info">Initializing...</div>
+    </div>
 
     <script type="importmap">
         {
@@ -115,6 +135,53 @@
         const dimTrails = []; 
         const curveScale = 30;
         const pathWidth = 15;
+
+        class PerformanceTracker {
+            constructor() {
+                this.trackedParticles = [];
+                this.displayElement = document.getElementById('tracking-info');
+            }
+
+            selectParticles(allParticles) {
+                this.trackedParticles = [];
+                const availableParticles = [...allParticles];
+                const numToTrack = Math.min(5, availableParticles.length);
+
+                for (let i = 0; i < numToTrack; i++) {
+                    const randomIndex = Math.floor(Math.random() * availableParticles.length);
+                    const particle = availableParticles.splice(randomIndex, 1)[0];
+                    if (particle) {
+                        this.trackedParticles.push(particle);
+                    }
+                }
+            }
+
+            updateDisplay() {
+                if (!this.displayElement) return;
+
+                if (this.trackedParticles.length === 0) {
+                    this.displayElement.textContent = "No particles selected for tracking.";
+                    return;
+                }
+
+                let content = '';
+                this.trackedParticles.forEach((p, index) => {
+                    if (p.markedForRemoval) {
+                         content += `Particle ${index + 1} (${p.type}): REMOVED\n\n`;
+                         return; // Skip to the next particle
+                    }
+                    
+                    const vel = p.velocity ? p.velocity.length().toFixed(3) : 'N/A';
+                    const acc = p.accelerationMagnitude ? p.accelerationMagnitude.toFixed(3) : 'N/A';
+                    
+                    content += `Particle ${index + 1} (${p.type})\n`;
+                    content += ` Velocity:     ${vel}\n`;
+                    content += ` Acceleration: ${acc}\n\n`;
+                });
+                this.displayElement.textContent = content;
+            }
+        }
+        const performanceTracker = new PerformanceTracker();
 
         class LemniscateCurve extends THREE.Curve {
             constructor(scale = 10) { super(); this.scale = scale; }
@@ -205,6 +272,12 @@
                     orbitalRadius: Math.random() * 2 + 1,
                     orbitalAngle: Math.random() * 2 * Math.PI,
                     isOrbited: false,
+
+                    // Add these new lines
+                    previousPosition: new THREE.Vector3(),
+                    velocity: new THREE.Vector3(),
+                    previousVelocity: new THREE.Vector3(),
+                    accelerationMagnitude: 0
                 });
             }
 
@@ -229,6 +302,9 @@
             resetToGeneralView();
             const particleCount = parseInt(document.getElementById('particleCountInput').value) || 150;
             for (let i = 0; i < particleCount; i++) createParticle();
+
+            // Add this line
+            performanceTracker.selectParticles(particles);
         }
 
         function createExplosion(position, size, color = 0xffffff) {
@@ -393,6 +469,22 @@
                     p.mesh.position.copy(basePoint.add(wobbleOffset));
                 }
                 
+                // --- Physics Calculations for Tracking ---
+                if (delta > 0 && p.previousPosition) {
+                    // Store previous velocity before calculating the new one
+                    p.previousVelocity.copy(p.velocity);
+
+                    // Velocity = (Current Position - Previous Position) / time
+                    p.velocity.subVectors(p.mesh.position, p.previousPosition).divideScalar(delta);
+
+                    // Acceleration = (Current Velocity - Previous Velocity) / time
+                    const accelerationVector = new THREE.Vector3().subVectors(p.velocity, p.previousVelocity).divideScalar(delta);
+                    p.accelerationMagnitude = accelerationVector.length();
+
+                    // Update previous position for the next frame
+                    p.previousPosition.copy(p.mesh.position);
+                }
+                
                 if (p.markedForRemoval) {
                     if (p.type === 'oscillator' && p.parent) { p.parent.isOrbited = false; }
                     scene.remove(p.mesh);
@@ -489,9 +581,13 @@
             }
             
             composer.render(delta);
+
+            // Add this line
+            performanceTracker.updateDisplay();
         }
 
         init();
     </script>
 </body>
 </html>
+
