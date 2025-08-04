@@ -40,7 +40,12 @@
             width: 320px;
         }
         #settings-panel {
-            top: 280px; /* Adjusted position */
+            top: 280px;
+            width: 320px;
+        }
+#performance-panel {
+            right: 20px;
+            top: 20px;
             width: 320px;
         }
         #settings-panel label {
@@ -56,27 +61,12 @@
              margin-top: 15px;
              padding: 10px;
         }
-        #performance-panel {
-            top: 580px; /* Increased top margin to prevent overlap */
-            width: 320px;
-        }
-        #tracking-info {
-            margin-top: 10px;
-            padding: 5px;
-            background-color: rgba(0, 0, 0, 0.3);
-            border-radius: 3px;
-            height: 150px; /* Or adjust as needed */
-            overflow-y: auto;
-            font-family: "Courier New", Courier, monospace;
-            font-size: 12px;
-            line-height: 1.4;
-            white-space: pre;
-        }
     </style>
 </head>
 <body>
+<div class="ui-panel">
     <!-- UI Panels -->
-    <div id="controls-panel" class="ui-panel">
+    <div id="controls-panel">
         <button id="chaseViewBtn" class="view-btn">Get Particle Chase Perspective</button>
         <button id="streetViewBtn" class="view-btn">Get Particle Road Perspective</button>
         <button id="flyViewBtn" class="view-btn">Get Fly-By Perspective</button>
@@ -84,16 +74,16 @@
         <button id="fibonacciViewBtn" class="view-btn">Get Fibonacci Perspective</button>
     </div>
 
-    <div id="settings-panel" class="ui-panel">
+    <div id="settings-panel">
         <h4>Simulation Settings</h4>
         <label for="particleCountInput">Number of Particles:</label>
         <input type="number" id="particleCountInput" value="150" min="1" max="500">
 
         <label for="speedFactorInput">Initial Speed Factor:</label>
         <input type="range" id="speedFactorInput" value="1" min="0.1" max="5" step="0.1">
-        
-        <label for="accelerationFactorInput">Acceleration Factor: <span id="accelerationValue">1.0</span></label>
-        <input type="range" id="accelerationFactorInput" value="1" min="0" max="10" step="0.1">
+
+        <label for="accelerationFactorInput">Acceleration: <span id="accelerationValue">1.0</span></label>
+        <input type="range" id="accelerationFactorInput" value="1.0" min="0.2" max="30" step="0.1">
 
         <label for="fibonacciLifespanInput">Fibonacci Lifespan (minutes): <span id="lifespanValue">10</span></label>
         <input type="range" id="fibonacciLifespanInput" value="10" min="1" max="20" step="1">
@@ -101,12 +91,13 @@
         <button id="restartBtn" class="view-btn">Apply & Restart</button>
     </div>
 
-<div id="performance-panel" class="ui-panel">
-        <h4>Performance Logger</h4>
-        <button id="startLoggingBtn" class="view-btn">Start/Reset Logging</button>
+    <div id="performance-panel">
+        <h4>Performance Logging</h4>
+        <button id="startLoggingBtn" class="view-btn">Start Logging 5 Particles</button>
         <button id="exportLogBtn" class="view-btn">Export Log</button>
-        <div id="tracking-info">Click 'Start/Reset Logging' to begin...</div>
     </div>
+
+    <div>    
 
     <script type="importmap">
         {
@@ -131,63 +122,96 @@
 
         let scene, camera, renderer, composer, controls;
         let clock = new THREE.Clock();
-        
+
         const particles = [];
         const explosions = [];
-        const dimTrails = []; 
+        const dimTrails = [];
         const curveScale = 30;
         const pathWidth = 15;
-
+        
+        // --- PERFORMANCE LOGGER ---
         class PerformanceLogger {
             constructor() {
                 this.trackedParticles = [];
                 this.log = [];
                 this.isLogging = false;
-                this.displayElement = document.getElementById('tracking-info');
             }
 
             startTracking(particles) {
                 this.trackedParticles = [];
-                this.log = [];
-                const availableParticles = [...particles];
-                const numToTrack = Math.min(5, availableParticles.length);
+                this.log = []; 
 
-                for (let i = 0; i < numToTrack; i++) {
+                const availableParticles = [...particles];
+                const count = Math.min(5, availableParticles.length);
+                
+                for(let i = 0; i < count; i++) {
                     const randomIndex = Math.floor(Math.random() * availableParticles.length);
                     const particle = availableParticles.splice(randomIndex, 1)[0];
-                    if (particle) {
-                        particle.initialSpeed = particle.speed; // Store initial speed
-                        this.trackedParticles.push(particle);
-                    }
+                    
+                    // Store the initial speed separately for logging
+                    particle.initialSpeed = particle.speed; 
+                    this.trackedParticles.push(particle);
                 }
                 this.isLogging = this.trackedParticles.length > 0;
+                 console.log(`Started tracking ${this.trackedParticles.length} particles.`);
             }
 
-            updateDisplay() {
-                if (!this.isLogging || !this.displayElement) return;
-                
-                let content = '';
-                this.trackedParticles.forEach((p, i) => {
+            logPerformance(elapsedTime) {
+                if (!this.isLogging) return;
+
+                this.trackedParticles.forEach(p => {
+                    // Stop tracking if particle is removed
                     if (p.markedForRemoval) {
-                        content += `P${i+1} (${p.type}): REMOVED\n\n`;
+                        this.trackedParticles = this.trackedParticles.filter(tp => tp.mesh.uuid !== p.mesh.uuid);
                         return;
                     }
 
-                    const speed = p.speed !== undefined ? p.speed.toFixed(4) : (p.spiralRate ? p.spiralRate.toFixed(4) : 'N/A');
-                    const accel = p.acceleration !== undefined ? p.acceleration.toFixed(6) : 'N/A';
+                    let velocity = 0;
+                    // For Normal and un-parented Oscillator particles, velocity is their current speed on the path
+                    if (p.type === 'normal' || (p.type === 'oscillator' && !p.parent)) {
+                        velocity = p.speed; // This value is continuously updated by acceleration
+                    }
+                    // For orbiting oscillators, their velocity is tied to their parent, which is a more complex calculation.
+                    // For simplicity, we log their orbital speed parameter.
+                    else if (p.type === 'oscillator' && p.parent) {
+                        velocity = p.speed;
+                    }
+                    // Fibonacci particles have a different movement logic (spiral), so a linear velocity isn't directly applicable.
+                    // We can log their spiral rate as a measure of their "speed".
+                    else if (p.type === 'fibonacci') {
+                         velocity = p.spiralRate;
+                    }
 
-                    content += `P${i+1} (${p.type}) Time: ${p.timeAlive.toFixed(1)}s\n`;
-                    content += ` Speed: ${speed} | Accel: ${accel}\n\n`;
+
+                    this.log.push({
+                        timestamp: elapsedTime.toFixed(3),
+                        particleId: p.mesh.uuid,
+                        particleType: p.type,
+                        initialSpeed: p.initialSpeed !== undefined ? p.initialSpeed.toFixed(5) : 'N/A',
+                        acceleration: p.acceleration !== undefined ? p.acceleration.toFixed(7) : 'N/A',
+                        currentVelocity: velocity.toFixed(5),
+                        position: { x: p.mesh.position.x.toFixed(2), y: p.mesh.position.y.toFixed(2), z: p.mesh.position.z.toFixed(2) }
+                    });
                 });
-                this.displayElement.textContent = content;
             }
 
             exportLog() {
-                // This function can be expanded later if needed
-                console.log("Exporting log data...");
+                 if (this.log.length === 0) {
+                    console.log("No performance data to export.");
+                    return;
+                }
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.log, null, 2));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", "particle_performance_log.json");
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+                console.log("Performance log exported.");
             }
         }
         const performanceLogger = new PerformanceLogger();
+
 
         class LemniscateCurve extends THREE.Curve {
             constructor(scale = 10) { super(); this.scale = scale; }
@@ -236,14 +260,14 @@
             let geometry, material, mesh;
             const speedFactor = parseFloat(document.getElementById('speedFactorInput').value) || 1.0;
             const accelerationFactor = parseFloat(document.getElementById('accelerationFactorInput').value) || 1.0;
-            const particle = { type, markedForRemoval: false, mesh: null, timeAlive: 0 };
+            const particle = { type, markedForRemoval: false, mesh: null };
 
             if (type === 'fibonacci') {
                 const color = new THREE.Color(Math.random() * 0xffffff);
                 geometry = new THREE.SphereGeometry(0.4, 16, 16);
                 material = new THREE.MeshBasicMaterial({ color: color });
                 mesh = new THREE.Mesh(geometry, material);
-                
+
                 const lifespanInMinutes = parseFloat(document.getElementById('fibonacciLifespanInput').value);
 
                 Object.assign(particle, {
@@ -268,7 +292,7 @@
                 Object.assign(particle, {
                     mesh,
                     speed: (options.speed || (Math.random() * 0.05 + 0.02)) * speedFactor,
-                    acceleration: (Math.random() * 0.0001 + 0.00005) * accelerationFactor,
+                    acceleration: accelerationFactor * 0.001,
                     pathPosition: options.pathPosition || Math.random(),
                     wobbleAmplitude: new THREE.Vector3((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5, (Math.random() - 0.5) * pathWidth),
                     wobbleFrequency: new THREE.Vector3(Math.random() * 2 + 1, Math.random() * 2 + 1, Math.random() * 2 + 1),
@@ -278,12 +302,6 @@
                     orbitalRadius: Math.random() * 2 + 1,
                     orbitalAngle: Math.random() * 2 * Math.PI,
                     isOrbited: false,
-
-                    // Add these new lines
-                    previousPosition: new THREE.Vector3(),
-                    velocity: new THREE.Vector3(),
-                    previousVelocity: new THREE.Vector3(),
-                    accelerationMagnitude: 0
                 });
             }
 
@@ -294,6 +312,8 @@
 
 
         function restartSimulation() {
+            performanceLogger.isLogging = false; // Stop logging on restart
+            
             while(particles.length > 0) {
                 const p = particles.pop();
                 scene.remove(p.mesh);
@@ -309,7 +329,7 @@
             const particleCount = parseInt(document.getElementById('particleCountInput').value) || 150;
             for (let i = 0; i < particleCount; i++) createParticle();
 
-            performanceLogger.startTracking(particles);
+            console.log("Simulation Restarted.");
         }
 
         function createExplosion(position, size, color = 0xffffff) {
@@ -320,7 +340,7 @@
             explosions.push({ mesh: explosion, life: 1.0 });
             scene.add(explosion);
         }
-        
+
         function resetToGeneralView() {
             if (lockedParticle) lockedParticle.mesh.visible = true;
             cameraMode = 'general';
@@ -334,7 +354,7 @@
             document.getElementById('tailViewBtn').textContent = 'Get Particle Tail Perspective';
             document.getElementById('fibonacciViewBtn').textContent = 'Get Fibonacci Perspective';
         }
-        
+
         function init() {
             setupScene();
             const chaseViewBtn = document.getElementById('chaseViewBtn');
@@ -347,27 +367,30 @@
             const lifespanValue = document.getElementById('lifespanValue');
             const accelerationSlider = document.getElementById('accelerationFactorInput');
             const accelerationValue = document.getElementById('accelerationValue');
+            const startLoggingBtn = document.getElementById('startLoggingBtn');
+            const exportLogBtn = document.getElementById('exportLogBtn');
+
 
             lifespanSlider.addEventListener('input', () => { lifespanValue.textContent = lifespanSlider.value; });
             accelerationSlider.addEventListener('input', () => { accelerationValue.textContent = parseFloat(accelerationSlider.value).toFixed(1); });
             restartBtn.addEventListener('click', restartSimulation);
-            const startLoggingBtn = document.getElementById('startLoggingBtn');
-            const exportLogBtn = document.getElementById('exportLogBtn');
+            
+            // Performance logger button events
             startLoggingBtn.addEventListener('click', () => performanceLogger.startTracking(particles));
             exportLogBtn.addEventListener('click', () => performanceLogger.exportLog());
-            
+
             function setCameraMode(mode) {
                  if (cameraMode === mode) { resetToGeneralView(); return; }
                 if (lockedParticle) lockedParticle.mesh.visible = true;
-                
+
                 cameraMode = mode;
                 lockedParticle = null;
                 controls.enabled = false;
 
                 if (['chase', 'street', 'tail'].includes(mode)) {
                     const normalParticles = particles.filter(p => p.type === 'normal');
-                    if (normalParticles.length > 0) { 
-                        lockedParticle = normalParticles[Math.floor(Math.random() * normalParticles.length)]; 
+                    if (normalParticles.length > 0) {
+                        lockedParticle = normalParticles[Math.floor(Math.random() * normalParticles.length)];
                     } else { resetToGeneralView(); return; }
                 } else if (mode === 'fibonacci') {
                     const fibonacciParticles = particles.filter(p => p.type === 'fibonacci');
@@ -381,7 +404,7 @@
                 document.getElementById('flyViewBtn').textContent = mode === 'fly' ? 'Get General Perspective' : 'Get Fly-By Perspective';
                 document.getElementById('tailViewBtn').textContent = mode === 'tail' ? 'Get General Perspective' : 'Get Particle Tail Perspective';
                 document.getElementById('fibonacciViewBtn').textContent = mode === 'fibonacci' ? 'Get General Perspective' : 'Get Fibonacci Perspective';
-                
+
                 if (['street', 'fibonacci'].includes(mode) && lockedParticle) lockedParticle.mesh.visible = false;
             }
 
@@ -406,12 +429,14 @@
             const delta = clock.getDelta();
             const elapsedTime = clock.getElapsedTime();
 
+            performanceLogger.logPerformance(elapsedTime);
+
             explosions.forEach((exp, index) => {
                 exp.life -= delta * 2;
-                if (exp.life <= 0) { scene.remove(exp.mesh); explosions.splice(index, 1); } 
+                if (exp.life <= 0) { scene.remove(exp.mesh); explosions.splice(index, 1); }
                 else { exp.mesh.material.opacity = exp.life; exp.mesh.scale.setScalar(1 + (1 - exp.life) * 2); }
             });
-            
+
             for (let i = dimTrails.length - 1; i >= 0; i--) {
                 const trail = dimTrails[i];
                 trail.life -= delta;
@@ -425,7 +450,6 @@
 
             for (let i = particles.length - 1; i >= 0; i--) {
                 const p = particles[i];
-                p.timeAlive += delta; // Increment time alive
                 let onInfinityPath = false;
 
                 if (p.type === 'oscillator') {
@@ -438,8 +462,8 @@
                         onInfinityPath = true;
                     }
                 } else if (p.type === 'fibonacci') {
-                    p.life -= delta; 
-                    if (p.life <= 0) { p.markedForRemoval = true; } 
+                    p.life -= delta;
+                    if (p.life <= 0) { p.markedForRemoval = true; }
                     else {
                         const oldPosition = p.mesh.position.clone();
                         p.spiralAngle += p.spiralRate * delta;
@@ -448,7 +472,7 @@
                         const point = new THREE.Vector3(radius * Math.cos(p.spiralAngle), radius * Math.sin(p.spiralAngle), 0);
                         point.applyMatrix4(p.rotationMatrix);
                         p.mesh.position.copy(p.spiralCenter).add(point);
-                        
+
                         const trailMaterial = new THREE.LineBasicMaterial({ color: p.color, transparent: true, opacity: 0.25 });
                         const trailGeometry = new THREE.BufferGeometry().setFromPoints([oldPosition, p.mesh.position.clone()]);
                         const trailLine = new THREE.Line(trailGeometry, trailMaterial);
@@ -462,10 +486,11 @@
 
                 if (onInfinityPath) {
                     const oldPathPosition = p.pathPosition;
+                    // This is where v = u + at is implemented frame-by-frame
                     p.speed += p.acceleration * delta;
                     p.pathPosition = (p.pathPosition + p.speed * delta) % 1;
                     if (p.pathPosition < oldPathPosition) p.laps++;
-                    
+
                     if (p.type === 'oscillator' && !p.parent && p.laps >= 2) {
                         p.markedForRemoval = true;
                     }
@@ -478,14 +503,14 @@
                     );
                     p.mesh.position.copy(basePoint.add(wobbleOffset));
                 }
-                
+
                 if (p.markedForRemoval) {
                     if (p.type === 'oscillator' && p.parent) { p.parent.isOrbited = false; }
                     scene.remove(p.mesh);
                     particles.splice(i, 1);
                 }
             }
-            
+
             // --- COLLISION LOGIC ---
             const centerThreshold = 2.0;
             for (let i = 0; i < particles.length; i++) {
@@ -494,7 +519,7 @@
                     const p2 = particles[j];
 
                     if (!p1 || !p2 || p1.type !== 'normal' || p2.type !== 'normal' || p1.markedForRemoval || p2.markedForRemoval) continue;
-                    
+
                     const dist = p1.mesh.position.distanceTo(p2.mesh.position);
                     const collisionDistance = p1.mesh.geometry.parameters.radius + p2.mesh.geometry.parameters.radius;
 
@@ -503,8 +528,8 @@
                         if (collisionPoint.length() < centerThreshold) {
                             const v1 = curve.getPointAt((p1.pathPosition + 0.01) % 1).sub(p1.mesh.position);
                             const v2 = curve.getPointAt((p2.pathPosition + 0.01) % 1).sub(p2.mesh.position);
-                            
-                            if (v1.dot(v2) < 0) { 
+
+                            if (v1.dot(v2) < 0) {
                                 if (p1.isOrbited && p2.isOrbited) {
                                     createExplosion(collisionPoint, collisionDistance, new THREE.Color(0x00BFFF));
                                     createParticle('normal', { pathPosition: p1.pathPosition });
@@ -527,7 +552,7 @@
                                 }
                                 p1.markedForRemoval = true;
                                 p2.markedForRemoval = true;
-                                break; 
+                                break;
                             }
                         }
                     }
@@ -573,15 +598,12 @@
                     camera.lookAt(flyLookAtPos);
                     break;
             }
-            
-            composer.render(delta);
 
-            performanceLogger.updateDisplay();
+            composer.render(delta);
         }
 
         init();
     </script>
 </body>
 </html>
-
 
