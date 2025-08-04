@@ -1,0 +1,4 @@
+cd ~/Desktop/DIGITAL ART/INFINITY PARTICLES
+git add .
+git commit -m "Updated particle physics and added new UI feature"
+git push
