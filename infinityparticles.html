@@ -187,6 +187,33 @@ class PerformanceLogger {
             }
         }
 
+        class ButterflyCurve extends THREE.Curve {
+            constructor(scale = 10) {
+                super();
+                this.scale = scale;
+            }
+            getPoint(t) {
+                const angle = t * 24 * Math.PI;
+                const x = Math.sin(angle) * (Math.exp(Math.cos(angle)) - 2 * Math.cos(4 * angle) - Math.pow(Math.sin(angle / 12), 5));
+                const y = Math.cos(angle) * (Math.exp(Math.cos(angle)) - 2 * Math.cos(4 * angle) - Math.pow(Math.sin(angle / 12), 5));
+                return new THREE.Vector3(x * this.scale, y * this.scale, 0);
+            }
+        }
+
+        class MaurerRoseCurve extends THREE.Curve {
+            constructor(scale = 10, n = 6, d = 71) {
+                super();
+                this.scale = scale; this.n = n; this.d = d;
+            }
+            getPoint(t) {
+                const k = t * 360 * this.d;
+                const r = this.scale * Math.sin(this.n * k * (Math.PI / 180));
+                const x = r * Math.cos(k * (Math.PI / 180));
+                const y = r * Math.sin(k * (Math.PI / 180));
+                return new THREE.Vector3(x, y, 0);
+            }
+        }
+
         class LissajousCurve extends THREE.Curve {
             constructor(scale = 10, a = 1, b = 3, A = 1, B = 2, delta = Math.PI / 2) {
                 super();
@@ -265,7 +292,7 @@ class PerformanceLogger {
 
                 Object.assign(particle, {
                     mesh,
-                    life: 3 + Math.random() * 2, // Live for 3-5 seconds
+                    life: 5 + Math.random() * 2, // Live for 5-7 seconds
                     direction: new THREE.Vector3().randomDirection(),
                     speed: 5 + Math.random() * 5,
                     sineAmplitude: 1 + Math.random() * 2,
@@ -277,27 +304,25 @@ class PerformanceLogger {
                     oscillationAmplitude: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2)
                 });
             } else if (type === 'celestial') {
-                geometry = new THREE.SphereGeometry(0.3, 16, 16);
+                // Make particles larger and brighter
+                geometry = new THREE.SphereGeometry(0.6, 16, 16);
                 material = new THREE.MeshBasicMaterial({ color: options.color || 0xffffff });
+                material.emissive = new THREE.Color(options.color);
+                material.emissiveIntensity = 2; // This makes it glow more intensely
                 mesh = new THREE.Mesh(geometry, material);
 
-                const curveType = Math.random() > 0.5 ? 'torusKnot' : 'lissajous';
+                const curveTypes = ['torusKnot', 'lissajous', 'butterfly', 'maurerRose'];
+                const curveType = curveTypes[Math.floor(Math.random() * curveTypes.length)];
+                
                 let curve;
                 if (curveType === 'torusKnot') {
-                    curve = new THREE.TorusKnotCurve(
-                        10 + Math.random() * 10, // radius
-                        2 + Math.random() * 4,   // tube
-                        64, 8,                   // tubularSegments, radialSegments
-                        Math.floor(Math.random() * 3) + 2, // p
-                        Math.floor(Math.random() * 5) + 3  // q
-                    );
-                } else {
-                    curve = new LissajousCurve(
-                        15 + Math.random() * 10, // scale
-                        Math.floor(Math.random() * 3) + 1, // a
-                        Math.floor(Math.random() * 4) + 1, // b
-                        1, 1, Math.PI / 2
-                    );
+                    curve = new THREE.TorusKnotCurve(15, 3, 100, 16, Math.floor(Math.random() * 3) + 2, Math.floor(Math.random() * 5) + 3);
+                } else if (curveType === 'lissajous') {
+                    curve = new LissajousCurve(20, Math.floor(Math.random() * 3) + 1, Math.floor(Math.random() * 4) + 1);
+                } else if (curveType === 'butterfly') {
+                    curve = new ButterflyCurve(4);
+                } else { // maurerRose
+                    curve = new MaurerRoseCurve(15, Math.floor(Math.random() * 5) + 2, Math.floor(Math.random() * 20) + 70);
                 }
                 
                 Object.assign(particle, {
@@ -551,22 +576,14 @@ function createShockwave(position, color) {
                     p.life -= delta;
                     p.timeAlive += delta;
                     if (p.life <= 0) {
-                        // --- TRANSITION TO CELESTIAL PARTICLE ---
-                        p.type = 'celestial';
-                        p.life = 20 + Math.random() * 10; // New, longer lifespan
-                        p.origin = p.mesh.position.clone(); // Start new path from current location
-                        p.pathProgress = 0;
-                        p.pathSpeed = 0.05 + Math.random() * 0.05;
-
-                        const curveType = Math.random() > 0.5 ? 'torusKnot' : 'lissajous';
-                        if (curveType === 'torusKnot') {
-                            p.curve = new THREE.TorusKnotCurve(15, 3, 100, 16, Math.floor(Math.random() * 3) + 2, Math.floor(Math.random() * 5) + 3);
-                        } else {
-                            p.curve = new LissajousCurve(20, Math.floor(Math.random() * 3) + 1, Math.floor(Math.random() * 4) + 1);
+                        // Explode and give birth to 2nd Gen particles
+                        createShockwave(p.mesh.position, p.color);
+                        for (let k = 0; k < 4; k++) {
+                            createParticle('celestial', { origin: p.mesh.position, color: p.color });
                         }
-                        p.rotationMatrix = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2);
-
+                        p.markedForRemoval = true;
                     } else {
+                        // ... sine particle movement and trail logic remains here ...
                         const oldPosition = p.mesh.position.clone();
 
                         // Base position moves in a straight line
@@ -748,6 +765,7 @@ function createShockwave(position, color) {
     </script>
 </body>
 </html>
+
 
 
 
