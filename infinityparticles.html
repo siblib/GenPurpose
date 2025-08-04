@@ -234,7 +234,7 @@ class PerformanceLogger {
 
                 Object.assign(particle, {
                     mesh,
-                    life: 5 + Math.random() * 5, // Random lifespan between 5 and 10 seconds
+                    life: 8 + Math.random() * 23, // Random lifespan between 8 and 31 seconds
                     color,
                     lastTrailPoint: null,
                     spiralCenter: options.center || new THREE.Vector3(),
@@ -256,7 +256,11 @@ class PerformanceLogger {
                     speed: 5 + Math.random() * 5,
                     sineAmplitude: 1 + Math.random() * 2,
                     sineFrequency: 0.5 + Math.random() * 1.5,
-                    origin: options.center.clone()
+                    origin: options.center.clone(),
+                    color: options.color, // For the trail
+                    // Properties for secondary oscillation
+                    oscillationFrequency: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2),
+                    oscillationAmplitude: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2)
                 });
             } else { // Normal or Oscillator
                 const radius = options.radius || Math.random() * 0.5 + 0.25;
@@ -500,17 +504,35 @@ function createShockwave(position, color) {
                     if (p.life <= 0) {
                         p.markedForRemoval = true;
                     } else {
+                        const oldPosition = p.mesh.position.clone();
+
                         // Base position moves in a straight line
                         const basePos = p.origin.clone().add(p.direction.clone().multiplyScalar(p.timeAlive * p.speed));
                         
-                        // Create a perpendicular vector for the sine wave offset
+                        // Create a perpendicular vector for the main sine wave offset
                         const perpendicular = new THREE.Vector3().crossVectors(p.direction, new THREE.Vector3(0, 0, 1)).normalize();
-                        
-                        // Calculate the sine offset
                         const sineOffset = Math.sin(p.timeAlive * p.sineFrequency) * p.sineAmplitude;
                         
-                        p.mesh.position.copy(basePos.add(perpendicular.multiplyScalar(sineOffset)));
+                        // Add the secondary random oscillation
+                        const oscillationOffset = new THREE.Vector3(
+                            Math.sin(elapsedTime * p.oscillationFrequency.x) * p.oscillationAmplitude.x,
+                            Math.cos(elapsedTime * p.oscillationFrequency.y) * p.oscillationAmplitude.y,
+                            Math.sin(elapsedTime * p.oscillationFrequency.z) * p.oscillationAmplitude.z
+                        );
+
+                        // Combine all movements
+                        p.mesh.position.copy(basePos.add(perpendicular.multiplyScalar(sineOffset)).add(oscillationOffset));
                         p.mesh.material.opacity = p.life / 10;
+
+                        // Create the trail
+                        if (oldPosition.distanceTo(p.mesh.position) > 0) {
+                            const trailMaterial = new THREE.LineBasicMaterial({ color: p.color, transparent: true, opacity: 0.25 });
+                            const trailGeometry = new THREE.BufferGeometry().setFromPoints([oldPosition, p.mesh.position.clone()]);
+                            const trailLine = new THREE.Line(trailGeometry, trailMaterial);
+                            const initialLife = 180; // Same lifespan as Fibonacci trails
+                            dimTrails.push({ line: trailLine, life: initialLife, initialLife });
+                            scene.add(trailLine);
+                        }
                     }
                 } else { // Normal particle
                     onInfinityPath = true;
@@ -638,4 +660,5 @@ function createShockwave(position, color) {
     </script>
 </body>
 </html>
+
 
