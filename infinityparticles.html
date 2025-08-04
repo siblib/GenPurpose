@@ -115,15 +115,17 @@
 
             <button id="restartBtn" class="view-btn">Apply & Restart</button>
         </div>
-    </div>
-
-    <div id="performance-panel" class="ui-panel">
+    
+        <div id="performance-panel">
         <h4>Performance Logger</h4>
         <button id="loggingToggleBtn" class="view-btn">Start Logging</button>
         <div id="tracking-info" style="margin-top: 10px; padding: 5px; background-color: rgba(0,0,0,0.3); border-radius: 3px; height: 150px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4; white-space: pre;">
             Click 'Start Logging' to track particles.
         </div>
     </div>
+</div>
+
+    
 
     <div id="zoom-controls">
         <button id="zoomInBtn" class="zoom-btn">+</button>
@@ -323,6 +325,7 @@
                 mesh = new THREE.Mesh(geometry, material);
                 
                 Object.assign(particle, {
+                    previousPosition: (options.center || new THREE.Vector3()).clone(),
                     mesh,
                     life: 8 + Math.random() * 23, // Random lifespan between 8 and 31 seconds
                     color,
@@ -340,6 +343,7 @@
                 mesh = new THREE.Mesh(geometry, material);
 
                 Object.assign(particle, {
+                    previousPosition: options.center.clone(),
                     mesh,
                     life: 5 + Math.random() * 2, 
                     direction: new THREE.Vector3().randomDirection(),
@@ -371,6 +375,7 @@
                 }
                 
                 Object.assign(particle, {
+                    previousPosition: options.origin.clone(),
                     mesh,
                     life: 20 + Math.random() * 10,
                     origin: options.origin.clone(),
@@ -612,13 +617,14 @@
                         p.markedForRemoval = true;
                     }
                     else {
-                        const oldPosition = p.mesh.position.clone();
+                        const oldPosition = p.previousPosition.clone(); // Use the stored previous position
                         p.spiralAngle += p.spiralRate * delta;
                         const b = 0.3, a = 0.5;
                         const radius = a * Math.exp(b * p.spiralAngle);
                         const point = new THREE.Vector3(radius * Math.cos(p.spiralAngle), radius * Math.sin(p.spiralAngle), 0);
                         point.applyMatrix4(p.rotationMatrix);
                         p.mesh.position.copy(p.spiralCenter).add(point);
+                        p.previousPosition.copy(p.mesh.position); // Update for the next frame
 
                         if (oldPosition.distanceTo(p.mesh.position) > 0) {
                             const trailMaterial = new THREE.LineBasicMaterial({ color: p.color, transparent: true, opacity: 0.25 });
@@ -638,7 +644,7 @@
                         }
                         p.markedForRemoval = true;
                     } else {
-                        const oldPosition = p.mesh.position.clone();
+                        const oldPosition = p.previousPosition.clone();
                         const basePos = p.origin.clone().add(p.direction.clone().multiplyScalar(p.timeAlive * p.speed));
                         const perpendicular = new THREE.Vector3().crossVectors(p.direction, new THREE.Vector3(0, 0, 1)).normalize();
                         const sineOffset = Math.sin(p.timeAlive * p.sineFrequency) * p.sineAmplitude;
@@ -648,6 +654,7 @@
                             Math.sin(elapsedTime * p.oscillationFrequency.z) * p.oscillationAmplitude.z
                         );
                         p.mesh.position.copy(basePos.add(perpendicular.multiplyScalar(sineOffset)).add(oscillationOffset));
+                        p.previousPosition.copy(p.mesh.position);
                         p.mesh.material.opacity = p.life / 5;
 
                         if (oldPosition.distanceTo(p.mesh.position) > 0) {
@@ -664,11 +671,12 @@
                     if (p.life <= 0) {
                         p.markedForRemoval = true;
                     } else {
-                        const oldPosition = p.mesh.position.clone();
+                        const oldPosition = p.previousPosition.clone();
                         p.pathProgress = (p.pathProgress + delta * p.pathSpeed) % 1;
                         const point = p.curve.getPointAt(p.pathProgress);
                         point.applyMatrix4(p.rotationMatrix);
                         p.mesh.position.copy(p.origin).add(point);
+                        p.previousPosition.copy(p.mesh.position);
                         
                         p.mesh.material.opacity = p.life / 20;
 
@@ -806,3 +814,4 @@
     </script>
 </body>
 </html>
+
