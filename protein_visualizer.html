@@ -72,8 +72,13 @@
             bottom: 20px;
             right: 20px;
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
+            align-items: center;
             z-index: 101;
+        }
+        .zoom-btn-group {
+            display: flex;
+            flex-direction: column;
         }
         .zoom-btn {
             width: 50px;
@@ -94,6 +99,13 @@
         }
         #zoomOutBtn {
             background-color: rgba(200, 0, 0, 0.5);
+        }
+        #muteBtn {
+            width: 50px;
+            height: 50px;
+            margin-left: 15px;
+            font-size: 20px;
+            background-color: rgba(150, 0, 150, 0.5);
         }
         #log-panel {
             position: absolute;
@@ -166,8 +178,11 @@
     </div>
 
     <div id="zoom-controls">
-        <button id="zoomInBtn" class="zoom-btn">+</button>
-        <button id="zoomOutBtn" class="zoom-btn">-</button>
+        <div class="zoom-btn-group">
+            <button id="zoomInBtn" class="zoom-btn">+</button>
+            <button id="zoomOutBtn" class="zoom-btn">-</button>
+        </div>
+        <button id="muteBtn" class="zoom-btn">🔇</button>
     </div>
     <script type="importmap">
         {
@@ -193,6 +208,7 @@
         let pathData = [];
         const logHistory = [];
         const MAX_LOG_HISTORY = 40;
+        let audioContext, masterGain, isSoundOn = false, lastSoundIndex = -1;
 
         const loader = new GLTFLoader();
         const fileInput = document.getElementById('fileInput');
@@ -210,6 +226,7 @@
         const generalViewBtn = document.getElementById('generalViewBtn');
         const zoomInBtn = document.getElementById('zoomInBtn');
         const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const muteBtn = document.getElementById('muteBtn');
 
         function init() {
             scene = new THREE.Scene();
@@ -224,8 +241,11 @@
             const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
             directionalLight.position.set(10, 20, 10);
             scene.add(directionalLight);
+            
+            // --- FIX: The controls are now correctly initialized ---
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
+            
             setupUIListeners();
             animate();
         }
@@ -235,6 +255,7 @@
             fileInput.addEventListener('change', handleFileSelect);
             simulateBtn.addEventListener('click', toggleSimulation);
             logBtn.addEventListener('click', toggleLogging);
+            muteBtn.addEventListener('click', toggleSound);
             speedSlider.addEventListener('input', (e) => {
                 speedFactor = parseFloat(e.target.value);
                 speedValue.textContent = speedFactor.toFixed(1);
@@ -246,6 +267,50 @@
             generalViewBtn.addEventListener('click', () => setCameraMode('general'));
             zoomInBtn.addEventListener('click', () => camera.position.multiplyScalar(0.8));
             zoomOutBtn.addEventListener('click', () => camera.position.multiplyScalar(1.2));
+        }
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioContext.createGain();
+                masterGain.connect(audioContext.destination);
+                masterGain.gain.value = 0;
+            }
+        }
+
+        function toggleSound() {
+            initAudio();
+            isSoundOn = !isSoundOn;
+            if (isSoundOn) {
+                masterGain.gain.setTargetAtTime(0.5, audioContext.currentTime, 0.01); // Volume set to 50%
+                muteBtn.textContent = '🔈';
+                muteBtn.style.backgroundColor = 'rgba(0, 150, 0, 0.5)';
+            } else {
+                masterGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.01);
+                muteBtn.textContent = '🔇';
+                muteBtn.style.backgroundColor = 'rgba(150, 0, 150, 0.5)';
+            }
+        }
+
+        function playSoundForColor(color) {
+            if (!audioContext || !color) return;
+            const now = audioContext.currentTime;
+            const oscillator = audioContext.createOscillator();
+            const popGain = audioContext.createGain();
+            oscillator.connect(popGain);
+            popGain.connect(masterGain);
+            const hsl = {};
+            color.getHSL(hsl);
+            const baseFrequency = 220; // A3 note
+            const topFrequency = 880; // A5 note
+            const frequency = baseFrequency + (hsl.h * (topFrequency - baseFrequency));
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, now);
+            popGain.gain.setValueAtTime(0, now);
+            popGain.gain.linearRampToValueAtTime(hsl.l, now + 0.01);
+            popGain.gain.exponentialRampToValueAtTime(0.00001, now + 0.15);
+            oscillator.start(now);
+            oscillator.stop(now + 0.2);
         }
 
         function toggleLogging() {
@@ -451,7 +516,6 @@
             return `[${r.toString().padEnd(3)},${g.toString().padEnd(3)},${b.toString().padEnd(3)}]`.padEnd(17);
         }
 
-        // --- FIX: Added the missing updateLogDisplay function ---
         function updateLogDisplay() {
             logList.innerHTML = '';
             logHistory.forEach(entry => {
@@ -460,8 +524,7 @@
                 logList.appendChild(li);
             });
         }
-        // --- END FIX ---
-
+        
         function animate() {
             requestAnimationFrame(animate);
             const delta = clock.getDelta();
@@ -492,20 +555,25 @@
                     pathObject.material.uniforms.particleDirection.value = particleDirection;
                 }
 
-                if (isLogging) {
+                if (isLogging || isSoundOn) {
                     const currentIndex = Math.round(particleProgress * (pathData.length - 1));
                     const currentData = pathData[currentIndex];
                     if (currentData) {
-                        const pos = currentData.point;
-                        const interpretedType = getStructureTypeFromColor(currentData.color);
-                        const colorString = formatColorForLog(currentData.color);
+                        if (isSoundOn && currentIndex !== lastSoundIndex) {
+                            playSoundForColor(currentData.color);
+                            lastSoundIndex = currentIndex;
+                        }
+                        if (isLogging) {
+                            const pos = currentData.point;
+                            const interpretedType = getStructureTypeFromColor(currentData.color);
+                            const colorString = formatColorForLog(currentData.color);
+                            const logString = `Index: ${currentIndex.toString().padEnd(5)} Type: ${interpretedType.padEnd(14)} Color: ${colorString} Pos: [${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}]`;
 
-                        const logString = `Index: ${currentIndex.toString().padEnd(5)} Type: ${interpretedType.padEnd(14)} Color: ${colorString} Pos: [${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}]`;
-
-                        if (logHistory.length === 0 || logHistory[0] !== logString) {
-                            logHistory.unshift(logString);
-                            if (logHistory.length > MAX_LOG_HISTORY) logHistory.pop();
-                            updateLogDisplay();
+                            if (logHistory.length === 0 || logHistory[0] !== logString) {
+                                logHistory.unshift(logString);
+                                if (logHistory.length > MAX_LOG_HISTORY) logHistory.pop();
+                                updateLogDisplay();
+                            }
                         }
                     }
                 }
@@ -556,4 +624,4 @@
         init();
     </script>
 </body>
-</html>```
+</html>
