@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Three.js - Protein Path Visualizer</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            background-color: #000000;
+            color: #fff;
+            font-family: sans-serif;
+            overflow: hidden;
+        }
+        #info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 10px;
+            background-color: rgba(30, 30, 30, 0.85);
+            border: 1px solid #555;
+            border-radius: 8px;
+            width: 320px;
+            z-index: 100;
+        }
+        .control-group {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #444;
+        }
+        .control-group:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        h4 {
+            margin-top: 0;
+            color: #00aaff;
+        }
+        label, button {
+            display: block;
+            width: 100%;
+            margin-top: 10px;
+            text-align: left;
+        }
+        button {
+            padding: 12px;
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            text-align: center;
+        }
+        button:hover {
+            background-color: #444;
+        }
+        button:disabled {
+            background-color: #222;
+            color: #666;
+            cursor: not-allowed;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        #uploadBtn {
+            background-color: #0066aa;
+        }
+        #zoom-controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            z-index: 101;
+        }
+        .zoom-btn {
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            border: 2px solid white;
+            border-radius: 50%;
+            cursor: pointer;
+            margin-top: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #zoomInBtn {
+            background-color: rgba(0, 200, 0, 0.5);
+        }
+        #zoomOutBtn {
+            background-color: rgba(200, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="info-panel">
+        <div class="control-group">
+            <h4>1. Load Protein Path</h4>
+            <button id="uploadBtn">Choose Path File (.glb)</button>
+            <input type="file" id="fileInput" accept=".glb" style="display: none;">
+        </div>
+        <div class="control-group">
+            <h4>2. Simulation Controls</h4>
+            <button id="simulateBtn" disabled>Stop Simulation</button>
+            <label for="speedSlider">Particle Speed: <span id="speedValue">1.0</span></label>
+            <input type="range" id="speedSlider" min="0.1" max="5" step="0.1" value="1.0" disabled>
+        </div>
+        <div class="control-group">
+            <h4>3. Visualization</h4>
+            <button id="generate3DBtn" disabled>Generate 3D Shell</button>
+            <button id="flyInsideBtn" disabled>Fly Inside 3D</button>
+            <button id="moveWithParticleBtn" disabled>Move with Particle</button>
+            <button id="trackRotateBtn" disabled>Track Particle with Rotating Object</button>
+            <button id="generalViewBtn" disabled>General Perspective</button>
+        </div>
+    </div>
+    <div id="zoom-controls">
+        <button id="zoomInBtn" class="zoom-btn">+</button>
+        <button id="zoomOutBtn" class="zoom-btn">-</button>
+    </div>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.138.0/build/three.module.js",
+                "three/examples/jsm/controls/OrbitControls.js": "https://unpkg.com/three@0.138.0/examples/jsm/controls/OrbitControls.js",
+                "three/examples/jsm/loaders/GLTFLoader.js": "https://unpkg.com/three@0.138.0/examples/jsm/loaders/GLTFLoader.js"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+        let scene, camera, renderer, controls;
+        let particle, pathCurve, pathObject, tubeShell;
+        let isSimulating = false;
+        let particleProgress = 0;
+        let particleDirection = 1;
+        let speedFactor = 1.0;
+        let cameraMode = 'general';
+        let clock = new THREE.Clock();
+        const trailSegments = [];
+
+        const loader = new GLTFLoader();
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const simulateBtn = document.getElementById('simulateBtn');
+        const speedSlider = document.getElementById('speedSlider');
+        const speedValue = document.getElementById('speedValue');
+        const generate3DBtn = document.getElementById('generate3DBtn');
+        const flyInsideBtn = document.getElementById('flyInsideBtn');
+        const moveWithParticleBtn = document.getElementById('moveWithParticleBtn');
+        const trackRotateBtn = document.getElementById('trackRotateBtn');
+        const generalViewBtn = document.getElementById('generalViewBtn');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 20, 50);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            directionalLight.position.set(10, 20, 10);
+            scene.add(directionalLight);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            setupUIListeners();
+            animate();
+        }
+
+        function setupUIListeners() {
+            uploadBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleFileSelect);
+            simulateBtn.addEventListener('click', toggleSimulation);
+            speedSlider.addEventListener('input', (e) => {
+                speedFactor = parseFloat(e.target.value);
+                speedValue.textContent = speedFactor.toFixed(1);
+            });
+            generate3DBtn.addEventListener('click', createTubeShell);
+            flyInsideBtn.addEventListener('click', () => setCameraMode('fly'));
+            moveWithParticleBtn.addEventListener('click', () => setCameraMode('road'));
+            trackRotateBtn.addEventListener('click', () => setCameraMode('track_rotate'));
+            generalViewBtn.addEventListener('click', () => setCameraMode('general'));
+            zoomInBtn.addEventListener('click', () => camera.position.multiplyScalar(0.8));
+            zoomOutBtn.addEventListener('click', () => camera.position.multiplyScalar(1.2));
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                loader.parse(e.target.result, '', (gltf) => {
+                    if (pathObject) scene.remove(pathObject);
+                    if (particle) scene.remove(particle);
+                    if (tubeShell) scene.remove(tubeShell);
+                    if (trailSegments.length > 0) clearTrail();
+                    
+                    const pathMesh = gltf.scene.children[0];
+                    if (!pathMesh || !pathMesh.isMesh) {
+                        console.error("No valid mesh found in the GLB file.");
+                        return;
+                    }
+                    const points = [];
+                    const positionAttribute = pathMesh.geometry.attributes.position;
+                    for (let i = 0; i < positionAttribute.count; i++) {
+                        points.push(new THREE.Vector3().fromBufferAttribute(positionAttribute, i));
+                    }
+                    if (points.length < 2) {
+                        console.error("Not enough vertices in the mesh to create a path.");
+                        return;
+                    }
+                    pathCurve = new THREE.CatmullRomCurve3(points);
+                    const curvePoints = pathCurve.getPoints(500);
+                    const geometry = new THREE.BufferGeometry().setFromPoints(curvePoints);
+                    const material = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 });
+                    pathObject = new THREE.Line(geometry, material);
+                    new THREE.Box3().setFromObject(pathObject).getCenter(pathObject.position).multiplyScalar(-1);
+                    scene.add(pathObject);
+                    createParticle();
+                    
+                    simulateBtn.disabled = false;
+                    speedSlider.disabled = false;
+                    generate3DBtn.disabled = false;
+                    moveWithParticleBtn.disabled = false;
+                    trackRotateBtn.disabled = false;
+                    generalViewBtn.disabled = false;
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function createParticle() {
+            if (particle) scene.remove(particle);
+            const particleGeo = new THREE.SphereGeometry(0.8, 32, 32);
+            const particleMat = new THREE.MeshStandardMaterial({ 
+                color: 0xff0000, 
+                emissive: 0xff0000, 
+                emissiveIntensity: 3 
+            });
+            particle = new THREE.Mesh(particleGeo, particleMat);
+            scene.add(particle);
+            particleProgress = 0;
+            updateParticlePosition();
+        }
+
+        function toggleSimulation() {
+            isSimulating = !isSimulating;
+            simulateBtn.textContent = isSimulating ? 'Stop Simulation' : 'Start Simulation';
+        }
+
+        function createTubeShell() {
+            if (!pathCurve) return;
+            if (tubeShell) scene.remove(tubeShell);
+            const tubeGeo = new THREE.TubeGeometry(pathCurve, 200, 1.2, 16, false); // Increased radius and segments
+            const tubeMat = new THREE.MeshStandardMaterial({
+                color: 0xcccccc,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide
+            });
+            tubeShell = new THREE.Mesh(tubeGeo, tubeMat);
+            tubeShell.position.copy(pathObject.position);
+            scene.add(tubeShell);
+            generate3DBtn.disabled = true;
+            flyInsideBtn.disabled = false;
+        }
+
+        function setCameraMode(mode) {
+            cameraMode = mode;
+            controls.enabled = (mode === 'general' || mode === 'track_rotate');
+
+            if (mode === 'general' && pathObject) {
+                const center = new THREE.Vector3();
+                new THREE.Box3().setFromObject(pathObject).getCenter(center);
+                controls.target.copy(center);
+            }
+
+            generalViewBtn.disabled = (mode === 'general');
+            flyInsideBtn.disabled = (mode === 'fly' || tubeShell === null);
+            moveWithParticleBtn.disabled = (mode === 'road');
+            trackRotateBtn.disabled = (mode === 'track_rotate');
+        }
+
+        function updateParticlePosition() {
+            if (!pathCurve || !particle) return;
+            const position = pathCurve.getPointAt(particleProgress);
+            if (position) {
+                particle.position.copy(position.add(pathObject.position));
+            }
+        }
+
+        function updateTrail() {
+            if (!particle) return;
+            const trailMaterial = new THREE.LineBasicMaterial({
+                color: particle.material.color,
+                transparent: true,
+                opacity: 1.0,
+                linewidth: 4
+            });
+            
+            const lastPoint = trailSegments.length > 0 ? trailSegments[trailSegments.length - 1].endPoint : particle.position;
+            const trailGeometry = new THREE.BufferGeometry().setFromPoints([lastPoint.clone(), particle.position.clone()]);
+            const trailLine = new THREE.Line(trailGeometry, trailMaterial);
+            
+            const segment = {
+                line: trailLine,
+                life: 180.0,
+                endPoint: particle.position.clone()
+            };
+            
+            trailSegments.push(segment);
+            scene.add(trailLine);
+        }
+
+        function clearTrail() {
+            trailSegments.forEach(segment => scene.remove(segment.line));
+            trailSegments.length = 0;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            for (let i = trailSegments.length - 1; i >= 0; i--) {
+                const segment = trailSegments[i];
+                segment.life -= delta;
+                if (segment.life <= 0) {
+                    scene.remove(segment.line);
+                    trailSegments.splice(i, 1);
+                } else {
+                    segment.line.material.opacity = segment.life / 180.0;
+                }
+            }
+            if (isSimulating && particle && pathCurve) {
+                particleProgress += (delta * 0.05 * speedFactor) * particleDirection;
+                if (particleProgress >= 1 || particleProgress <= 0) {
+                    particleDirection *= -1;
+                    particle.material.color.setHSL(Math.random(), 1.0, 0.5);
+                    particle.material.emissive.copy(particle.material.color);
+                    particleProgress = Math.max(0, Math.min(1, particleProgress));
+                }
+                updateParticlePosition();
+                updateTrail();
+            }
+
+            if (cameraMode === 'fly' || cameraMode === 'road') {
+                if (particle && pathCurve) {
+                    const lookAheadProgress = particleProgress + (0.02 * particleDirection);
+                    const lookAtPoint = pathCurve.getPointAt(Math.max(0, Math.min(1, lookAheadProgress)));
+
+                    if (lookAtPoint) {
+                        lookAtPoint.add(pathObject.position);
+                        let cameraPosition = new THREE.Vector3();
+
+                        if (cameraMode === 'fly') {
+                            const tangent = pathCurve.getTangentAt(particleProgress).normalize();
+                            const offset = tangent.multiplyScalar(-8).add(new THREE.Vector3(0, 2, 0));
+                            cameraPosition.copy(particle.position).add(offset);
+                        } else { // 'road' mode
+                            const backPointProgress = particleProgress - (0.015 * particleDirection);
+                            const cameraBasePos = pathCurve.getPointAt(Math.max(0, Math.min(1, backPointProgress)));
+                            cameraBasePos.add(pathObject.position);
+                            cameraPosition.copy(cameraBasePos).add(new THREE.Vector3(0, 1.5, 0));
+                        }
+                        
+                        camera.position.lerp(cameraPosition, 0.1);
+                        camera.lookAt(lookAtPoint);
+                    }
+                }
+            } else if (cameraMode === 'track_rotate') {
+                if (particle && pathCurve) {
+                    // 1. Smoothly move the control target to the particle's position
+                    controls.target.lerp(particle.position, 0.1);
+
+                    // 2. Determine the future direction vector (projected on XZ plane for stability)
+                    const lookAheadFactor = 0.05;
+                    const lookAheadProgress = particleProgress + (lookAheadFactor * particleDirection);
+                    const futureTangent = pathCurve.getTangentAt(Math.max(0, Math.min(1, lookAheadProgress))).normalize();
+                    futureTangent.y = 0; // Use horizontal component of the tangent for rotation
+                    futureTangent.normalize();
+
+                    // 3. Get current camera distance and height from the target to preserve the view
+                    const currentOffset = new THREE.Vector3().subVectors(camera.position, controls.target);
+                    const distance = currentOffset.length();
+                    const height = currentOffset.y; // Absolute height difference
+
+                    // 4. Calculate the desired camera position
+                    // We need the horizontal distance to project the direction vector correctly
+                    const horizontalDistance = Math.sqrt(Math.max(0, distance * distance - height * height));
+                    const backwardDirection = futureTangent.multiplyScalar(-1); // Position camera behind the direction of travel
+
+                    const desiredPosition = new THREE.Vector3()
+                        .copy(controls.target) // Start at the new target
+                        .add(new THREE.Vector3(0, height, 0)) // Add the preserved height
+                        .add(backwardDirection.multiplyScalar(horizontalDistance)); // Add the horizontal offset
+
+                    // 5. Smoothly interpolate camera position for a fluid motion
+                    camera.position.lerp(desiredPosition, 0.025);
+                }
+                // 6. Update controls is essential to sync its state with our manual camera changes
+                controls.update();
+            } else { // 'general' mode
+                controls.update();
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
