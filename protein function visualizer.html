@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Three.js - Protein Function Simulator</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <style>
+        body { margin: 0; background-color: #111; color: #fff; font-family: sans-serif; overflow: hidden; }
+        #info-panel { position: absolute; top: 10px; left: 10px; padding: 10px; background-color: rgba(30, 30, 30, 0.85); border: 1px solid #555; border-radius: 8px; width: 320px; z-index: 100; }
+        button { display: block; width: 100%; margin-top: 10px; padding: 12px; background-color: #333; color: white; border: 1px solid #555; border-radius: 5px; cursor: pointer; font-size: 14px; text-align: center; }
+        button:hover { background-color: #444; }
+        button:disabled { background-color: #222; color: #666; cursor: not-allowed; }
+        #uploadBtn { background-color: #0066aa; }
+        #simulateBtn { background-color: #aa00aa; }
+        .instructions { font-size: 12px; color: #aaa; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+    <div id="info-panel">
+        <div>
+            <h4>1. Load Protein Structure</h4>
+            <button id="uploadBtn">Choose Structure File (.glb)</button>
+            <input type="file" id="fileInput" accept=".glb" style="display: none;">
+        </div>
+        <div style="margin-top: 20px;">
+            <h4>2. Analyze Function</h4>
+            <button id="simulateBtn" disabled>Simulate Function (Show Surface)</button>
+            <div class="instructions">
+                <p>This will generate the protein's surface and color it by electrostatic potential:</p>
+                <p><b>Blue:</b> Positive Charge<br><b>Red:</b> Negative Charge<br><b>White:</b> Neutral</p>
+                <p>Drag the <b>purple sphere</b> to test binding pockets.</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.138.0/build/three.module.js",
+                "three/examples/jsm/controls/OrbitControls.js": "https://unpkg.com/three@0.138.0/examples/jsm/controls/OrbitControls.js",
+                "three/examples/jsm/loaders/GLTFLoader.js": "https://unpkg.com/three@0.138.0/examples/jsm/loaders/GLTFLoader.js"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+        let scene, camera, renderer, controls;
+        let proteinBackbone, proteinSurface, targetMolecule;
+        let originalPoints = [];
+        let originalColors = [];
+
+        // For dragging the target molecule
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let isDragging = false;
+
+        const loader = new GLTFLoader();
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const simulateBtn = document.getElementById('simulateBtn');
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
+            camera.position.set(0, 20, 150);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0x404040, 2.0);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            directionalLight.position.set(50, 50, 50);
+            scene.add(directionalLight);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            
+            setupUIListeners();
+            animate();
+        }
+
+        function setupUIListeners() {
+            uploadBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleFileSelect);
+            simulateBtn.addEventListener('click', createFunctionalSurface);
+            
+            window.addEventListener('mousedown', onMouseDown);
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                loader.parse(e.target.result, '', (gltf) => {
+                    if (proteinBackbone) scene.remove(proteinBackbone);
+                    if (proteinSurface) scene.remove(proteinSurface);
+                    if (targetMolecule) scene.remove(targetMolecule);
+                    originalPoints = [];
+                    originalColors = [];
+
+                    const pathMesh = gltf.scene.children[0];
+                    if (!pathMesh || !pathMesh.isMesh) return;
+
+                    const positions = pathMesh.geometry.attributes.position;
+                    const colors = pathMesh.geometry.attributes.color;
+                    for (let i = 0; i < positions.count; i++) {
+                        originalPoints.push(new THREE.Vector3().fromBufferAttribute(positions, i));
+                        if (colors) {
+                            originalColors.push(new THREE.Color().fromBufferAttribute(colors, i));
+                        }
+                    }
+                    if (originalPoints.length < 2) return;
+
+                    const curve = new THREE.CatmullRomCurve3(originalPoints);
+                    const geometry = new THREE.TubeGeometry(curve, originalPoints.length, 1.5, 8, false);
+                    const material = new THREE.MeshStandardMaterial({ color: 0x00ffff, metalness: 0.3, roughness: 0.5 });
+                    proteinBackbone = new THREE.Mesh(geometry, material);
+                    centerObject(proteinBackbone);
+                    scene.add(proteinBackbone);
+                    
+                    simulateBtn.disabled = false;
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        
+        function createFunctionalSurface() {
+            if (proteinBackbone) proteinBackbone.visible = false; // Hide backbone
+            if (proteinSurface) scene.remove(proteinSurface); // Remove old surface if any
+
+            // Create an InstancedMesh for performance
+            const sphereGeometry = new THREE.SphereGeometry(2.5, 12, 12); // Sphere for each atom
+            const surfaceMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    baseColor: { value: new THREE.Color(0xffffff) }
+                },
+                vertexShader: `
+                    varying vec3 vColor;
+                    void main() {
+                        vColor = color;
+                        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    varying vec3 vColor;
+                    void main() {
+                        // --- ELECTROSTATIC POTENTIAL LOGIC ---
+                        // Simple mapping from atom color to a charge value (-1 to 1)
+                        float charge = 0.0; // Default neutral (white)
+                        if (vColor.b > 0.7 && vColor.r < 0.3) charge = 1.0;  // Blue -> Positive
+                        if (vColor.r > 0.7 && vColor.b < 0.3) charge = -1.0; // Red -> Negative
+
+                        vec3 positiveColor = vec3(0.0, 0.2, 1.0); // Blue for positive
+                        vec3 negativeColor = vec3(1.0, 0.1, 0.0); // Red for negative
+                        vec3 neutralColor = vec3(0.9, 0.9, 0.9);  // White for neutral
+                        
+                        vec3 finalColor = (charge > 0.0) ? mix(neutralColor, positiveColor, charge) : mix(neutralColor, negativeColor, -charge);
+
+                        gl_FragColor = vec4(finalColor, 1.0);
+                    }
+                `
+            });
+
+            proteinSurface = new THREE.InstancedMesh(sphereGeometry, surfaceMaterial, originalPoints.length);
+
+            const matrix = new THREE.Matrix4();
+            for (let i = 0; i < originalPoints.length; i++) {
+                matrix.setPosition(originalPoints[i]);
+                proteinSurface.setMatrixAt(i, matrix);
+                if (originalColors[i]) {
+                    proteinSurface.setColorAt(i, originalColors[i]);
+                }
+            }
+            centerObject(proteinSurface);
+            scene.add(proteinSurface);
+
+            // Add the interactive target molecule
+            createTargetMolecule();
+        }
+
+        function createTargetMolecule() {
+            if (targetMolecule) scene.remove(targetMolecule);
+            const geometry = new THREE.SphereGeometry(4, 32, 32);
+            const material = new THREE.MeshStandardMaterial({ color: 0x9400D3, metalness: 0.2, roughness: 0.1 });
+            targetMolecule = new THREE.Mesh(geometry, material);
+            // Place it away from the protein initially
+            targetMolecule.position.set(50, 50, 50);
+            scene.add(targetMolecule);
+        }
+
+        function centerObject(obj) {
+            const box = new THREE.Box3().setFromObject(obj);
+            const center = box.getCenter(new THREE.Vector3());
+            obj.position.sub(center);
+        }
+
+        // --- MOUSE DRAGGING LOGIC ---
+        function onMouseDown(event) {
+            if (!targetMolecule) return;
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(targetMolecule);
+            if (intersects.length > 0) {
+                isDragging = true;
+                controls.enabled = false; // Disable camera controls while dragging
+            }
+        }
+        function onMouseMove(event) {
+            if (!isDragging || !targetMolecule) return;
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            // Project mouse onto a plane that is at the target's distance from the camera
+            const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()), -targetMolecule.position.clone().dot(camera.getWorldDirection(new THREE.Vector3())));
+            const intersectPoint = new THREE.Vector3();
+            raycaster.ray.intersectPlane(plane, intersectPoint);
+            if(intersectPoint) {
+                targetMolecule.position.copy(intersectPoint);
+            }
+        }
+        function onMouseUp() {
+            isDragging = false;
+            controls.enabled = true; // Re-enable camera controls
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

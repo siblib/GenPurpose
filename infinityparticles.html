@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Three.js - Fibonacci Particle Perspective</title>
+    <title>Three.js - Refined Particle Effects</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
     <style>
@@ -40,7 +40,7 @@
             width: 320px;
         }
         #settings-panel {
-            top: 280px;
+            top: 280px; 
             width: 320px;
         }
         #performance-panel {
@@ -61,34 +61,6 @@
              margin-top: 15px;
              padding: 10px;
         }
-        #zoom-controls {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            display: flex;
-            flex-direction: column;
-            z-index: 101;
-        }
-        .zoom-btn {
-            width: 50px;
-            height: 50px;
-            font-size: 24px;
-            font-weight: bold;
-            color: white;
-            border: 2px solid white;
-            border-radius: 50%;
-            cursor: pointer;
-            margin-top: 10px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        #zoomInBtn {
-            background-color: rgba(0, 200, 0, 0.5);
-        }
-        #zoomOutBtn {
-            background-color: rgba(200, 0, 0, 0.5);
-        }
     </style>
 </head>
 <body>
@@ -105,7 +77,7 @@
         <div id="settings-panel">
             <h4>Simulation Settings</h4>
             <label for="particleCountInput">Number of Particles:</label>
-            <input type="number" id="particleCountInput" value="150" min="1" max="500">
+            <input type="number" id="particleCountInput" value="80" min="1" max="500">
 
             <label for="speedFactorInput">Initial Speed Factor:</label>
             <input type="range" id="speedFactorInput" value="1" min="0.1" max="5" step="0.1">
@@ -124,13 +96,6 @@
         </div>
     </div>
 </div>
-
-    
-
-    <div id="zoom-controls">
-        <button id="zoomInBtn" class="zoom-btn">+</button>
-        <button id="zoomOutBtn" class="zoom-btn">-</button>
-    </div>
 
     <script type="importmap">
         {
@@ -158,50 +123,28 @@
 
         const particles = [];
         const explosions = [];
-        const dimTrails = [];
         const shockwaves = [];
+        const ghostTrails = []; 
         const curveScale = 30;
         const pathWidth = 15;
         
         class PerformanceLogger {
-            constructor() {
-                this.trackedParticles = [];
-                this.isLogging = false;
-                this.displayElement = document.getElementById('tracking-info');
-                this.logButton = document.getElementById('loggingToggleBtn');
-            }
-
+            constructor() { this.trackedParticles = []; this.isLogging = false; this.displayElement = document.getElementById('tracking-info'); this.logButton = document.getElementById('loggingToggleBtn'); }
             toggleLogging(particles) {
                 this.isLogging = !this.isLogging;
                 if (this.isLogging) {
-                    this.trackedParticles = [];
-                    const availableParticles = [...particles];
-                    const numToTrack = Math.min(5, availableParticles.length);
-                    for (let i = 0; i < numToTrack; i++) {
-                        const randomIndex = Math.floor(Math.random() * availableParticles.length);
-                        this.trackedParticles.push(availableParticles.splice(randomIndex, 1)[0]);
-                    }
+                    this.trackedParticles = []; const availableParticles = [...particles]; const numToTrack = Math.min(5, availableParticles.length);
+                    for (let i = 0; i < numToTrack; i++) { const randomIndex = Math.floor(Math.random() * availableParticles.length); this.trackedParticles.push(availableParticles.splice(randomIndex, 1)[0]); }
                     this.logButton.textContent = 'Stop Logging';
-                } else {
-                    this.trackedParticles = [];
-                    this.logButton.textContent = 'Start Logging';
-                    this.displayElement.textContent = "Logging stopped.";
-                }
+                } else { this.trackedParticles = []; this.logButton.textContent = 'Start Logging'; this.displayElement.textContent = "Logging stopped."; }
             }
-
             updateDisplay() {
-                if (!this.isLogging || !this.displayElement) return;
-
-                let content = '';
+                if (!this.isLogging || !this.displayElement) return; let content = '';
                 this.trackedParticles.forEach((p, i) => {
-                    if (!p || p.markedForRemoval) {
-                        content += `P${i+1}: REMOVED\n\n`;
-                        return;
-                    }
+                    if (!p || p.markedForRemoval) { content += `P${i+1}: REMOVED\n\n`; return; }
                     const type = p.type.charAt(0).toUpperCase() + p.type.slice(1);
                     const speed = p.speed !== undefined ? p.speed.toFixed(3) : 'N/A';
                     const accel = p.acceleration !== undefined ? p.acceleration.toFixed(4) : 'N/A';
-                    
                     content += `P${i+1} (${type}) Time: ${p.timeAlive.toFixed(1)}s\n`;
                     content += ` Speed: ${speed} | Accel: ${accel}\n\n`;
                 });
@@ -210,105 +153,37 @@
         }
         const performanceLogger = new PerformanceLogger();
 
-
         class LemniscateCurve extends THREE.Curve {
             constructor(scale = 10) { super(); this.scale = scale; }
-            getPoint(t) {
-                const a = this.scale; const t2 = 2 * Math.PI * t;
-                const x = a * Math.sqrt(2) * Math.cos(t2) / (Math.sin(t2) * Math.sin(t2) + 1);
-                const y = a * Math.sqrt(2) * Math.cos(t2) * Math.sin(t2) / (Math.sin(t2) * Math.sin(t2) + 1);
-                return new THREE.Vector3(x, y, 0);
-            }
+            getPoint(t) { const a = this.scale; const t2 = 2 * Math.PI * t; const x = a * Math.sqrt(2) * Math.cos(t2) / (Math.sin(t2) * Math.sin(t2) + 1); const y = a * Math.sqrt(2) * Math.cos(t2) * Math.sin(t2) / (Math.sin(t2) * Math.sin(t2) + 1); return new THREE.Vector3(x, y, 0); }
         }
-
         class ButterflyCurve extends THREE.Curve {
-            constructor(scale = 10) {
-                super();
-                this.scale = scale;
-            }
-            getPoint(t) {
-                const angle = t * 24 * Math.PI;
-                const x = Math.sin(angle) * (Math.exp(Math.cos(angle)) - 2 * Math.cos(4 * angle) - Math.pow(Math.sin(angle / 12), 5));
-                const y = Math.cos(angle) * (Math.exp(Math.cos(angle)) - 2 * Math.cos(4 * angle) - Math.pow(Math.sin(angle / 12), 5));
-                return new THREE.Vector3(x * this.scale, y * this.scale, 0);
-            }
+            constructor(scale = 10) { super(); this.scale = scale; }
+            getPoint(t) { const angle = t * 24 * Math.PI; const x = Math.sin(angle) * (Math.exp(Math.cos(angle)) - 2 * Math.cos(4 * angle) - Math.pow(Math.sin(angle / 12), 5)); const y = Math.cos(angle) * (Math.exp(Math.cos(angle)) - 2 * Math.cos(4 * angle) - Math.pow(Math.sin(angle / 12), 5)); return new THREE.Vector3(x * this.scale, y * this.scale, 0); }
         }
-
         class MaurerRoseCurve extends THREE.Curve {
-            constructor(scale = 10, n = 6, d = 71) {
-                super();
-                this.scale = scale; this.n = n; this.d = d;
-            }
-            getPoint(t) {
-                const k = t * 360 * this.d;
-                const r = this.scale * Math.sin(this.n * k * (Math.PI / 180));
-                const x = r * Math.cos(k * (Math.PI / 180));
-                const y = r * Math.sin(k * (Math.PI / 180));
-                return new THREE.Vector3(x, y, 0);
-            }
+            constructor(scale = 10, n = 6, d = 71) { super(); this.scale = scale; this.n = n; this.d = d; }
+            getPoint(t) { const k = t * 360 * this.d; const r = this.scale * Math.sin(this.n * k * (Math.PI / 180)); const x = r * Math.cos(k * (Math.PI / 180)); const y = r * Math.sin(k * (Math.PI / 180)); return new THREE.Vector3(x, y, 0); }
         }
-
         class LissajousCurve extends THREE.Curve {
-            constructor(scale = 10, a = 1, b = 3) {
-                super();
-                this.scale = scale;
-                this.a = a; this.b = b;
-            }
-            getPoint(t) {
-                const angle = 2 * Math.PI * t;
-                const x = this.scale * Math.sin(this.a * angle + Math.PI / 2);
-                const y = this.scale * Math.sin(this.b * angle);
-                return new THREE.Vector3(x, y, 0);
-            }
+            constructor(scale = 10, a = 1, b = 3) { super(); this.scale = scale; this.a = a; this.b = b;}
+            getPoint(t) { const angle = 2 * Math.PI * t; const x = this.scale * Math.sin(this.a * angle + Math.PI / 2); const y = this.scale * Math.sin(this.b * angle); return new THREE.Vector3(x, y, 0); }
         }
-
         class TorusKnotCurve extends THREE.Curve {
-            constructor(scale = 10, p = 2, q = 3) {
-                super();
-                this.scale = scale; this.p = p; this.q = q;
-            }
-            getPoint(t, optionalTarget = new THREE.Vector3()) {
-                const point = optionalTarget;
-                t *= Math.PI * 2;
-                const r = (2 + Math.cos(this.q * t));
-                const x = r * Math.cos(this.p * t);
-                const y = r * Math.sin(this.p * t);
-                const z = Math.sin(this.q * t);
-                return point.set(x, y, z).multiplyScalar(this.scale * 0.5);
-            }
+            constructor(scale = 10, p = 2, q = 3) { super(); this.scale = scale; this.p = p; this.q = q; }
+            getPoint(t, optionalTarget = new THREE.Vector3()) { const point = optionalTarget; t *= Math.PI * 2; const r = (2 + Math.cos(this.q * t)); const x = r * Math.cos(this.p * t); const y = r * Math.sin(this.p * t); const z = Math.sin(this.q * t); return point.set(x, y, z).multiplyScalar(this.scale * 0.5); }
         }
 
         const curve = new LemniscateCurve(curveScale);
 
-        let cameraMode = 'general';
-        let lockedParticle = null;
-        let flyPathPosition = 0;
-        const generalCameraPosition = new THREE.Vector3(0, 0, 100);
+        let cameraMode = 'general'; let lockedParticle = null; let flyPathPosition = 0; const generalCameraPosition = new THREE.Vector3(0, 0, 100);
 
         function setupScene() {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
-            camera.position.copy(generalCameraPosition);
-
-            renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.autoClearColor = false;
-            document.body.appendChild(renderer.domElement);
-
-            const clearPass = new ClearPass();
-            const renderScene = new RenderPass(scene, camera);
-            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-            bloomPass.threshold = 0.1; bloomPass.strength = 1.2; bloomPass.radius = 0.8;
-
-            composer = new EffectComposer(renderer);
-            composer.addPass(clearPass);
-            composer.addPass(renderScene);
-            composer.addPass(bloomPass);
-
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-
+            scene = new THREE.Scene(); camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000); camera.position.copy(generalCameraPosition);
+            renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(window.devicePixelRatio); renderer.autoClearColor = false; document.body.appendChild(renderer.domElement);
+            const clearPass = new ClearPass(); const renderScene = new RenderPass(scene, camera); const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85); bloomPass.threshold = 0.1; bloomPass.strength = 1.2; bloomPass.radius = 0.8;
+            composer = new EffectComposer(renderer); composer.addPass(clearPass); composer.addPass(renderScene); composer.addPass(bloomPass);
+            controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
             window.addEventListener('resize', onWindowResize, false);
         }
 
@@ -317,95 +192,55 @@
             const speedFactor = parseFloat(document.getElementById('speedFactorInput').value) || 1.0;
             const accelerationFactor = parseFloat(document.getElementById('accelerationFactorInput').value) || 1.0;
             const particle = { type, markedForRemoval: false, mesh: null, timeAlive: 0 };
+            
+            const hasTrail = ['fibonacci', 'sine', 'celestial', 'inward_fibonacci'].includes(type);
 
             if (type === 'fibonacci') {
                 const color = new THREE.Color(Math.random() * 0xffffff);
                 geometry = new THREE.SphereGeometry(0.4, 16, 16);
-                material = new THREE.MeshBasicMaterial({ color: color });
+                material = new THREE.MeshBasicMaterial({ color: color, transparent: true });
                 mesh = new THREE.Mesh(geometry, material);
-                
-                Object.assign(particle, {
-                    previousPosition: (options.center || new THREE.Vector3()).clone(),
-                    mesh,
-                    life: 8 + Math.random() * 23, // Random lifespan between 8 and 31 seconds
-                    color,
-                    lastTrailPoint: null,
-                    spiralCenter: options.center || new THREE.Vector3(),
-                    spiralAngle: Math.random() * Math.PI * 2,
-                    spiralRate: (Math.random() * 0.5 + 0.5),
-                    spiralDirection: 1,
-                    rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2)
-                });
-
+                const life = 8 + Math.random() * 23;
+                Object.assign(particle, { mesh, life: life, initialLife: life, color, spiralCenter: options.center || new THREE.Vector3(), spiralAngle: Math.random() * Math.PI * 2, spiralRate: (Math.random() * 0.5 + 0.5), spiralDirection: 1, rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2) });
             } else if (type === 'sine') {
                 geometry = new THREE.SphereGeometry(0.3, 16, 16);
-                material = new THREE.MeshBasicMaterial({ color: options.color || 0xffffff });
+                material = new THREE.MeshBasicMaterial({ color: options.color || 0xffffff, transparent: true });
                 mesh = new THREE.Mesh(geometry, material);
-
-                Object.assign(particle, {
-                    previousPosition: options.center.clone(),
-                    mesh,
-                    life: 5 + Math.random() * 2, 
-                    direction: new THREE.Vector3().randomDirection(),
-                    speed: 5 + Math.random() * 5,
-                    sineAmplitude: 1 + Math.random() * 2,
-                    sineFrequency: 0.5 + Math.random() * 1.5,
-                    origin: options.center.clone(),
-                    color: options.color,
-                    oscillationFrequency: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2),
-                    oscillationAmplitude: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2)
-                });
+                const life = 5 + Math.random() * 2;
+                Object.assign(particle, { mesh, life: life, initialLife: life, direction: new THREE.Vector3().randomDirection(), speed: 5 + Math.random() * 5, sineAmplitude: 1 + Math.random() * 2, sineFrequency: 0.5 + Math.random() * 1.5, origin: options.center.clone(), color: options.color, oscillationFrequency: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2), oscillationAmplitude: new THREE.Vector3(Math.random() * 2, Math.random() * 2, Math.random() * 2) });
             } else if (type === 'celestial') {
                 geometry = new THREE.SphereGeometry(0.6, 16, 16);
-                material = new THREE.MeshBasicMaterial({ color: options.color || 0xffffff });
+                material = new THREE.MeshBasicMaterial({ color: options.color || 0xffffff, transparent: true });
                 mesh = new THREE.Mesh(geometry, material);
-
                 const curveTypes = ['torusKnot', 'lissajous', 'butterfly', 'maurerRose'];
                 const curveType = curveTypes[Math.floor(Math.random() * curveTypes.length)];
-                
                 let curve;
-                if (curveType === 'torusKnot') {
-                    curve = new TorusKnotCurve(15, Math.floor(Math.random() * 3) + 2, Math.floor(Math.random() * 5) + 3);
-                } else if (curveType === 'lissajous') {
-                    curve = new LissajousCurve(20, Math.floor(Math.random() * 3) + 1, Math.floor(Math.random() * 4) + 1);
-                } else if (curveType === 'butterfly') {
-                    curve = new ButterflyCurve(4);
-                } else {
-                    curve = new MaurerRoseCurve(15, Math.floor(Math.random() * 5) + 2, Math.floor(Math.random() * 20) + 70);
-                }
-                
-                Object.assign(particle, {
-                    previousPosition: options.origin.clone(),
-                    mesh,
-                    life: 20 + Math.random() * 10,
-                    origin: options.origin.clone(),
-                    color: options.color,
-                    curve: curve,
-                    pathProgress: 0,
-                    pathSpeed: 0.05 + Math.random() * 0.05,
-                    rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2)
-                });
+                if (curveType === 'torusKnot') curve = new TorusKnotCurve(15, Math.floor(Math.random() * 3) + 2, Math.floor(Math.random() * 5) + 3);
+                else if (curveType === 'lissajous') curve = new LissajousCurve(20, Math.floor(Math.random() * 3) + 1, Math.floor(Math.random() * 4) + 1);
+                else if (curveType === 'butterfly') curve = new ButterflyCurve(4);
+                else curve = new MaurerRoseCurve(15, Math.floor(Math.random() * 5) + 2, Math.floor(Math.random() * 20) + 70);
+                const life = 20 + Math.random() * 10;
+                Object.assign(particle, { mesh, life: life, initialLife: life, origin: options.origin.clone(), color: options.color, curve: curve, pathProgress: 0, pathSpeed: 0.05 + Math.random() * 0.05, rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2) });
+            } else if (type === 'inward_fibonacci') {
+                geometry = new THREE.SphereGeometry(0.5, 16, 16);
+                material = new THREE.MeshBasicMaterial({ color: options.color, transparent: true });
+                mesh = new THREE.Mesh(geometry, material);
+                Object.assign(particle, { mesh, life: 15, initialLife: 15, color: options.color, spiralCenter: options.origin.clone(), spiralAngle: Math.atan2(options.origin.y, options.origin.x), spiralRate: 3 + Math.random() * 3, spiralDirection: -1, rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection().setZ(0).normalize(), Math.random() * Math.PI * 0.2 - 0.1) });
             } else {
                 const radius = options.radius || Math.random() * 0.5 + 0.25;
                 const color = options.color || new THREE.Color().setHSL(Math.random(), 1.0, 0.5);
                 geometry = new THREE.SphereGeometry(radius, 16, 16);
                 material = new THREE.MeshBasicMaterial({ color });
                 mesh = new THREE.Mesh(geometry, material);
-
-                Object.assign(particle, {
-                    mesh,
-                    speed: (options.speed || (Math.random() * 0.05 + 0.02)) * speedFactor,
-                    acceleration: (Math.random() * 0.0001 + 0.00005) * accelerationFactor,
-                    pathPosition: options.pathPosition || Math.random(),
-                    wobbleAmplitude: new THREE.Vector3((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5, (Math.random() - 0.5) * pathWidth),
-                    wobbleFrequency: new THREE.Vector3(Math.random() * 2 + 1, Math.random() * 2 + 1, Math.random() * 2 + 1),
-                    wobblePhase: new THREE.Vector3(Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI),
-                    laps: 0,
-                    parent: null,
-                    orbitalRadius: Math.random() * 2 + 1,
-                    orbitalAngle: Math.random() * 2 * Math.PI,
-                    isOrbited: false,
-                });
+                Object.assign(particle, { mesh, speed: (options.speed || (Math.random() * 0.05 + 0.02)) * speedFactor, acceleration: (Math.random() * 0.0001 + 0.00005) * accelerationFactor, pathPosition: options.pathPosition || Math.random(), wobbleAmplitude: new THREE.Vector3((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5, (Math.random() - 0.5) * pathWidth), wobbleFrequency: new THREE.Vector3(Math.random() * 2 + 1, Math.random() * 2 + 1, Math.random() * 2 + 1), wobblePhase: new THREE.Vector3(Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI), laps: 0, parent: null, orbitalRadius: Math.random() * 2 + 1, orbitalAngle: Math.random() * 2 * Math.PI, isOrbited: false });
+            }
+            
+            if (hasTrail) {
+                particle.trailPoints = [];
+                const trailMaterial = new THREE.LineBasicMaterial({ color: particle.color, transparent: true, opacity: 0.8 });
+                const trailGeometry = new THREE.BufferGeometry();
+                particle.trailLine = new THREE.Line(trailGeometry, trailMaterial);
+                scene.add(particle.trailLine);
             }
 
             particles.push(particle);
@@ -413,405 +248,216 @@
             return particle;
         }
 
-
         function restartSimulation() {
             performanceLogger.isLogging = false;
-            
-            while(particles.length > 0) {
-                const p = particles.pop();
-                scene.remove(p.mesh);
-            }
-            while(dimTrails.length > 0) {
-                const t = dimTrails.pop();
-                scene.remove(t.line);
-            }
-            explosions.forEach(exp => scene.remove(exp.mesh));
-            explosions.length = 0;
-            shockwaves.forEach(sw => scene.remove(sw.mesh));
-            shockwaves.length = 0;
-
+            while(particles.length > 0) { const p = particles.pop(); if (p.trailLine) scene.remove(p.trailLine); scene.remove(p.mesh); }
+            while(ghostTrails.length > 0) { const t = ghostTrails.pop(); scene.remove(t.line); }
+            explosions.forEach(exp => scene.remove(exp.mesh)); explosions.length = 0;
+            shockwaves.forEach(sw => scene.remove(sw.mesh)); shockwaves.length = 0;
             resetToGeneralView();
-            const particleCount = parseInt(document.getElementById('particleCountInput').value) || 150;
+            const particleCount = parseInt(document.getElementById('particleCountInput').value) || 80;
             for (let i = 0; i < particleCount; i++) createParticle();
-
-            console.log("Simulation Restarted.");
         }
 
         function createExplosion(position, size, color = 0xffffff) {
-            const geometry = new THREE.SphereGeometry(size, 16, 16);
-            const material = new THREE.MeshBasicMaterial({ color, transparent: true });
-            const explosion = new THREE.Mesh(geometry, material);
-            explosion.position.copy(position);
-            explosions.push({ mesh: explosion, life: 1.0 });
-            scene.add(explosion);
+            const geometry = new THREE.SphereGeometry(size, 16, 16); const material = new THREE.MeshBasicMaterial({ color, transparent: true }); const explosion = new THREE.Mesh(geometry, material);
+            explosion.position.copy(position); explosions.push({ mesh: explosion, life: 1.0 }); scene.add(explosion);
         }
 
-        function createShockwave(position, color) {
+        function createShockwave(position, color, isImplosion = false) {
             const shockwaveCount = 3 + Math.floor(Math.random() * 2);
             for (let i = 0; i < shockwaveCount; i++) {
-                const geometry = new THREE.RingGeometry(0.1, 0.2, 64);
-                const material = new THREE.MeshBasicMaterial({ 
-                    color: color, 
-                    transparent: true, 
-                    opacity: 0.8,
-                    side: THREE.DoubleSide 
-                });
-                const wave = new THREE.Mesh(geometry, material);
-                wave.position.copy(position);
-                
-                shockwaves.push({
-                    mesh: wave,
-                    life: 2.0,
-                    maxLife: 2.0,
-                    expandSpeed: 15 + i * 5 + Math.random() * 5
-                });
+                const geometry = new THREE.RingGeometry(0.1, 0.2, 64); const material = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+                const wave = new THREE.Mesh(geometry, material); wave.position.copy(position);
+                shockwaves.push({ mesh: wave, life: 2.0, maxLife: 2.0, expandSpeed: 15 + i * 5 + Math.random() * 5, isImplosion: isImplosion });
                 scene.add(wave);
             }
         }
-
+        
         function resetToGeneralView() {
             if (lockedParticle) lockedParticle.mesh.visible = true;
-            cameraMode = 'general';
-            lockedParticle = null;
-            controls.enabled = true;
-            camera.position.copy(generalCameraPosition);
-            controls.target.set(0, 0, 0);
-            document.getElementById('chaseViewBtn').textContent = 'Get Particle Chase Perspective';
-            document.getElementById('streetViewBtn').textContent = 'Get Particle Road Perspective';
-            document.getElementById('flyViewBtn').textContent = 'Get Fly-By Perspective';
-            document.getElementById('tailViewBtn').textContent = 'Get Particle Tail Perspective';
+            cameraMode = 'general'; lockedParticle = null; controls.enabled = true;
+            camera.position.copy(generalCameraPosition); controls.target.set(0, 0, 0);
+            document.getElementById('chaseViewBtn').textContent = 'Get Particle Chase Perspective'; document.getElementById('streetViewBtn').textContent = 'Get Particle Road Perspective';
+            document.getElementById('flyViewBtn').textContent = 'Get Fly-By Perspective'; document.getElementById('tailViewBtn').textContent = 'Get Particle Tail Perspective';
             document.getElementById('fibonacciViewBtn').textContent = 'Get Fibonacci Perspective';
         }
 
         function init() {
             setupScene();
-            const chaseViewBtn = document.getElementById('chaseViewBtn');
-            const streetViewBtn = document.getElementById('streetViewBtn');
-            const flyViewBtn = document.getElementById('flyViewBtn');
-            const tailViewBtn = document.getElementById('tailViewBtn');
-            const fibonacciViewBtn = document.getElementById('fibonacciViewBtn');
-            const restartBtn = document.getElementById('restartBtn');
-            const accelerationSlider = document.getElementById('accelerationFactorInput');
-            const accelerationValue = document.getElementById('accelerationValue');
-            const zoomInBtn = document.getElementById('zoomInBtn');
-            const zoomOutBtn = document.getElementById('zoomOutBtn');
-            
+            const chaseViewBtn = document.getElementById('chaseViewBtn'); const streetViewBtn = document.getElementById('streetViewBtn'); const flyViewBtn = document.getElementById('flyViewBtn'); const tailViewBtn = document.getElementById('tailViewBtn'); const fibonacciViewBtn = document.getElementById('fibonacciViewBtn'); const restartBtn = document.getElementById('restartBtn');
+            const accelerationSlider = document.getElementById('accelerationFactorInput'); const accelerationValue = document.getElementById('accelerationValue');
             accelerationSlider.addEventListener('input', () => { accelerationValue.textContent = parseFloat(accelerationSlider.value).toFixed(1); });
             restartBtn.addEventListener('click', restartSimulation);
-            
             document.getElementById('loggingToggleBtn').addEventListener('click', () => performanceLogger.toggleLogging(particles));
-
-            zoomInBtn.addEventListener('click', () => {
-                camera.position.multiplyScalar(0.8);
-            });
-
-            zoomOutBtn.addEventListener('click', () => {
-                camera.position.multiplyScalar(1.2);
-            });
 
             function setCameraMode(mode) {
                  if (cameraMode === mode) { resetToGeneralView(); return; }
                 if (lockedParticle) lockedParticle.mesh.visible = true;
-
-                cameraMode = mode;
-                lockedParticle = null;
-                controls.enabled = false;
-
-                if (['chase', 'street', 'tail'].includes(mode)) {
-                    const normalParticles = particles.filter(p => p.type === 'normal');
-                    if (normalParticles.length > 0) {
-                        lockedParticle = normalParticles[Math.floor(Math.random() * normalParticles.length)];
-                    } else { resetToGeneralView(); return; }
-                } else if (mode === 'fibonacci') {
-                    const fibonacciParticles = particles.filter(p => p.type === 'fibonacci');
-                    if (fibonacciParticles.length > 0) {
-                        lockedParticle = fibonacciParticles[Math.floor(Math.random() * fibonacciParticles.length)];
-                    } else { resetToGeneralView(); return; }
-                }
-
-                document.getElementById('chaseViewBtn').textContent = mode === 'chase' ? 'Get General Perspective' : 'Get Particle Chase Perspective';
-                document.getElementById('streetViewBtn').textContent = mode === 'street' ? 'Get General Perspective' : 'Get Particle Road Perspective';
-                document.getElementById('flyViewBtn').textContent = mode === 'fly' ? 'Get General Perspective' : 'Get Fly-By Perspective';
-                document.getElementById('tailViewBtn').textContent = mode === 'tail' ? 'Get General Perspective' : 'Get Particle Tail Perspective';
+                cameraMode = mode; lockedParticle = null; controls.enabled = false;
+                let candidates = [];
+                if (['chase', 'street', 'tail'].includes(mode)) candidates = particles.filter(p => p.type === 'normal');
+                else if (mode === 'fibonacci') candidates = particles.filter(p => p.type === 'fibonacci');
+                if(candidates.length > 0) lockedParticle = candidates[Math.floor(Math.random() * candidates.length)];
+                else { resetToGeneralView(); return; }
+                document.getElementById('chaseViewBtn').textContent = mode === 'chase' ? 'Get General Perspective' : 'Get Particle Chase Perspective'; document.getElementById('streetViewBtn').textContent = mode === 'street' ? 'Get General Perspective' : 'Get Particle Road Perspective';
+                document.getElementById('flyViewBtn').textContent = mode === 'fly' ? 'Get General Perspective' : 'Get Fly-By Perspective'; document.getElementById('tailViewBtn').textContent = mode === 'tail' ? 'Get General Perspective' : 'Get Particle Tail Perspective';
                 document.getElementById('fibonacciViewBtn').textContent = mode === 'fibonacci' ? 'Get General Perspective' : 'Get Fibonacci Perspective';
-
                 if (['street', 'fibonacci'].includes(mode) && lockedParticle) lockedParticle.mesh.visible = false;
             }
 
-            chaseViewBtn.addEventListener('click', () => setCameraMode('chase'));
-            streetViewBtn.addEventListener('click', () => setCameraMode('street'));
-            flyViewBtn.addEventListener('click', () => setCameraMode('fly'));
-            tailViewBtn.addEventListener('click', () => setCameraMode('tail'));
+            chaseViewBtn.addEventListener('click', () => setCameraMode('chase')); streetViewBtn.addEventListener('click', () => setCameraMode('street'));
+            flyViewBtn.addEventListener('click', () => setCameraMode('fly')); tailViewBtn.addEventListener('click', () => setCameraMode('tail'));
             fibonacciViewBtn.addEventListener('click', () => setCameraMode('fibonacci'));
-            restartSimulation();
-            animate();
+            restartSimulation(); animate();
         }
 
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            composer.setSize(window.innerWidth, window.innerHeight);
-        }
+        function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); composer.setSize(window.innerWidth, window.innerHeight); }
 
         function animate() {
             requestAnimationFrame(animate);
-            const delta = clock.getDelta();
-            const elapsedTime = clock.getElapsedTime();
+            const delta = clock.getDelta(); const elapsedTime = clock.getElapsedTime();
 
             for (let i = shockwaves.length - 1; i >= 0; i--) {
-                const sw = shockwaves[i];
-                sw.life -= delta;
-                if (sw.life <= 0) {
-                    scene.remove(sw.mesh);
-                    shockwaves.splice(i, 1);
-                } else {
-                    const progress = 1 - (sw.life / sw.maxLife);
+                const sw = shockwaves[i]; sw.life -= delta;
+                if (sw.life <= 0) { scene.remove(sw.mesh); shockwaves.splice(i, 1); } 
+                else {
+                    let progress = 1 - (sw.life / sw.maxLife);
+                    if (sw.isImplosion) progress = sw.life / sw.maxLife;
                     const currentRadius = progress * sw.expandSpeed;
                     sw.mesh.scale.set(currentRadius, currentRadius, currentRadius);
-                    sw.mesh.material.opacity = sw.life / sw.maxLife;
+                    sw.mesh.material.opacity = sw.isImplosion ? progress : (sw.life / sw.maxLife);
                 }
             }
-
             performanceLogger.updateDisplay();
-
-            explosions.forEach((exp, index) => {
-                exp.life -= delta * 2;
-                if (exp.life <= 0) { scene.remove(exp.mesh); explosions.splice(index, 1); }
-                else { exp.mesh.material.opacity = exp.life; exp.mesh.scale.setScalar(1 + (1 - exp.life) * 2); }
-            });
-
-            for (let i = dimTrails.length - 1; i >= 0; i--) {
-                const trail = dimTrails[i];
-                trail.life -= delta;
-                if (trail.life <= 0) {
-                    scene.remove(trail.line);
-                    dimTrails.splice(i, 1);
-                } else {
-                    trail.line.material.opacity = (trail.life / trail.initialLife) * 0.25;
-                }
+            explosions.forEach((exp, index) => { exp.life -= delta * 2; if (exp.life <= 0) { scene.remove(exp.mesh); explosions.splice(index, 1); } else { exp.mesh.material.opacity = exp.life; exp.mesh.scale.setScalar(1 + (1 - exp.life) * 2); } });
+            
+            for (let i = ghostTrails.length - 1; i >= 0; i--) {
+                const trail = ghostTrails[i]; trail.life -= delta;
+                if (trail.life <= 0) { scene.remove(trail.line); ghostTrails.splice(i, 1); }
+                else { trail.line.material.opacity = (trail.life / trail.initialLife) * 0.7; }
             }
 
             for (let i = particles.length - 1; i >= 0; i--) {
-                const p = particles[i];
-                p.timeAlive += delta;
-                let onInfinityPath = false;
-
+                const p = particles[i]; p.timeAlive += delta; let onInfinityPath = false;
                 if (p.type === 'oscillator') {
                     if (p.parent && !p.parent.markedForRemoval) {
                         p.orbitalAngle += p.speed * delta * 5;
                         const orbitPos = new THREE.Vector3(Math.cos(p.orbitalAngle) * p.orbitalRadius, Math.sin(p.orbitalAngle) * p.orbitalRadius, Math.sin(p.orbitalAngle * p.wobbleFrequency.z) * p.orbitalRadius * 0.5);
                         p.mesh.position.copy(p.parent.mesh.position).add(orbitPos);
-                    } else {
-                        if (p.parent) { p.parent.isOrbited = false; p.parent = null; }
-                        onInfinityPath = true;
-                    }
-                } else if (p.type === 'fibonacci') {
+                    } else { if (p.parent) { p.parent.isOrbited = false; p.parent = null; } onInfinityPath = true; }
+                } else if (p.type === 'fibonacci' || p.type === 'sine' || p.type === 'celestial' || p.type === 'inward_fibonacci') {
                     p.life -= delta;
                     if (p.life <= 0) {
-                        createShockwave(p.mesh.position, p.color);
-                        const numToSpawn = 5 + Math.floor(Math.random() * 6);
-                        for (let k = 0; k < numToSpawn; k++) {
-                            createParticle('sine', { center: p.mesh.position, color: p.color });
+                        let trailLife = 0;
+                        if (p.type === 'fibonacci') {
+                            trailLife = 180; createShockwave(p.mesh.position, p.color);
+                            for (let k = 0; k < 5 + Math.floor(Math.random() * 6); k++) createParticle('sine', { center: p.mesh.position, color: p.color });
+                        } else if (p.type === 'sine') {
+                            trailLife = 5; createShockwave(p.mesh.position, p.color);
+                            for (let k = 0; k < 4; k++) createParticle('celestial', { origin: p.mesh.position, color: p.color });
+                        } else if (p.type === 'celestial') {
+                            trailLife = 180; createShockwave(p.mesh.position, p.color, true);
+                            createParticle('inward_fibonacci', { origin: p.mesh.position, color: p.color });
+                        } else if (p.type === 'inward_fibonacci') {
+                            trailLife = 0.25; // Quick fade for the final trail
+                            createShockwave(new THREE.Vector3(0,0,0), p.color, true);
                         }
-                        p.markedForRemoval = true;
-                    }
-                    else {
-                        const oldPosition = p.previousPosition.clone(); // Use the stored previous position
-                        p.spiralAngle += p.spiralRate * delta;
-                        const b = 0.3, a = 0.5;
-                        const radius = a * Math.exp(b * p.spiralAngle);
-                        const point = new THREE.Vector3(radius * Math.cos(p.spiralAngle), radius * Math.sin(p.spiralAngle), 0);
-                        point.applyMatrix4(p.rotationMatrix);
-                        p.mesh.position.copy(p.spiralCenter).add(point);
-                        p.previousPosition.copy(p.mesh.position); // Update for the next frame
-
-                        if (oldPosition.distanceTo(p.mesh.position) > 0) {
-                            const trailMaterial = new THREE.LineBasicMaterial({ color: p.color, transparent: true, opacity: 0.25 });
-                            const trailGeometry = new THREE.BufferGeometry().setFromPoints([oldPosition, p.mesh.position.clone()]);
-                            const trailLine = new THREE.Line(trailGeometry, trailMaterial);
-                            const initialLife = 180;
-                            dimTrails.push({ line: trailLine, life: initialLife, initialLife });
-                            scene.add(trailLine);
-                        }
-                    }
-                } else if (p.type === 'sine') {
-                    p.life -= delta;
-                    if (p.life <= 0) {
-                        createShockwave(p.mesh.position, p.color);
-                        for (let k = 0; k < 4; k++) {
-                            createParticle('celestial', { origin: p.mesh.position, color: p.color });
+                        if (p.trailLine) {
+                            ghostTrails.push({ line: p.trailLine, life: trailLife, initialLife: trailLife });
+                            p.trailLine = null;
                         }
                         p.markedForRemoval = true;
                     } else {
-                        const oldPosition = p.previousPosition.clone();
-                        const basePos = p.origin.clone().add(p.direction.clone().multiplyScalar(p.timeAlive * p.speed));
-                        const perpendicular = new THREE.Vector3().crossVectors(p.direction, new THREE.Vector3(0, 0, 1)).normalize();
-                        const sineOffset = Math.sin(p.timeAlive * p.sineFrequency) * p.sineAmplitude;
-                        const oscillationOffset = new THREE.Vector3(
-                            Math.sin(elapsedTime * p.oscillationFrequency.x) * p.oscillationAmplitude.x,
-                            Math.cos(elapsedTime * p.oscillationFrequency.y) * p.oscillationAmplitude.y,
-                            Math.sin(elapsedTime * p.oscillationFrequency.z) * p.oscillationAmplitude.z
-                        );
-                        p.mesh.position.copy(basePos.add(perpendicular.multiplyScalar(sineOffset)).add(oscillationOffset));
-                        p.previousPosition.copy(p.mesh.position);
-                        p.mesh.material.opacity = p.life / 5;
-
-                        if (oldPosition.distanceTo(p.mesh.position) > 0) {
-                            const trailMaterial = new THREE.LineBasicMaterial({ color: p.color, transparent: true, opacity: 0.25 });
-                            const trailGeometry = new THREE.BufferGeometry().setFromPoints([oldPosition, p.mesh.position.clone()]);
-                            const trailLine = new THREE.Line(trailGeometry, trailMaterial);
-                            const initialLife = 180;
-                            dimTrails.push({ line: trailLine, life: initialLife, initialLife });
-                            scene.add(trailLine);
+                        if (p.type === 'fibonacci') {
+                            p.spiralAngle += p.spiralRate * delta; const radius = 0.5 * Math.exp(0.3 * p.spiralAngle); const point = new THREE.Vector3(radius * Math.cos(p.spiralAngle), radius * Math.sin(p.spiralAngle), 0);
+                            point.applyMatrix4(p.rotationMatrix); p.mesh.position.copy(p.spiralCenter).add(point);
+                        } else if (p.type === 'sine') {
+                            const basePos = p.origin.clone().add(p.direction.clone().multiplyScalar(p.timeAlive * p.speed)); const perpendicular = new THREE.Vector3().crossVectors(p.direction, new THREE.Vector3(0, 0, 1)).normalize(); const sineOffset = Math.sin(p.timeAlive * p.sineFrequency) * p.sineAmplitude;
+                            const oscillationOffset = new THREE.Vector3( Math.sin(elapsedTime * p.oscillationFrequency.x) * p.oscillationAmplitude.x, Math.cos(elapsedTime * p.oscillationFrequency.y) * p.oscillationAmplitude.y, Math.sin(elapsedTime * p.oscillationFrequency.z) * p.oscillationAmplitude.z );
+                            p.mesh.position.copy(basePos.add(perpendicular.multiplyScalar(sineOffset)).add(oscillationOffset));
+                        } else if (p.type === 'celestial') {
+                            p.pathProgress = (p.pathProgress + delta * p.pathSpeed) % 1; const point = p.curve.getPointAt(p.pathProgress);
+                            point.applyMatrix4(p.rotationMatrix); p.mesh.position.copy(p.origin).add(point);
+                            p.mesh.material.opacity = (p.life / p.initialLife) * 0.3; // REDUCED BRIGHTNESS
+                        } else if (p.type === 'inward_fibonacci') {
+                            const progress = 1 - (p.life / p.initialLife);
+                            const scaleFactor = 1 - Math.pow(progress, 3); 
+                            p.spiralAngle += p.spiralRate * delta * p.spiralDirection;
+                            const radius = (p.life / p.initialLife) * (p.spiralCenter.length() * 0.5);
+                            const point = new THREE.Vector3(radius * Math.cos(p.spiralAngle), radius * Math.sin(p.spiralAngle), 0);
+                             p.mesh.position.copy(p.spiralCenter.clone().multiplyScalar(scaleFactor)).add(point);
                         }
-                    }
-                } else if (p.type === 'celestial') {
-                    p.life -= delta;
-                    if (p.life <= 0) {
-                        p.markedForRemoval = true;
-                    } else {
-                        const oldPosition = p.previousPosition.clone();
-                        p.pathProgress = (p.pathProgress + delta * p.pathSpeed) % 1;
-                        const point = p.curve.getPointAt(p.pathProgress);
-                        point.applyMatrix4(p.rotationMatrix);
-                        p.mesh.position.copy(p.origin).add(point);
-                        p.previousPosition.copy(p.mesh.position);
                         
-                        p.mesh.material.opacity = p.life / 20;
-
-                        if (oldPosition.distanceTo(p.mesh.position) > 0) {
-                            const trailMaterial = new THREE.LineBasicMaterial({ color: p.color, transparent: true, opacity: 0.25 });
-                            const trailGeometry = new THREE.BufferGeometry().setFromPoints([oldPosition, p.mesh.position.clone()]);
-                            const trailLine = new THREE.Line(trailGeometry, trailMaterial);
-                            const initialLife = 180;
-                            dimTrails.push({ line: trailLine, life: initialLife, initialLife });
-                            scene.add(trailLine);
+                        if (p.trailLine) {
+                            p.trailPoints.push(p.mesh.position.clone());
+                            // *** NEW: Short, fixed-length trail for inward_fibonacci ***
+                            const maxTrailLength = p.type === 'inward_fibonacci' ? 30 : 200;
+                            if (p.trailPoints.length > maxTrailLength) p.trailPoints.shift();
+                            
+                            p.trailLine.geometry.setFromPoints(p.trailPoints);
+                            // *** NEW: Reduced trail brightness for celestial ***
+                            p.trailLine.material.opacity = (p.type === 'celestial') ? (p.life / p.initialLife) * 0.25 : 0.8;
                         }
                     }
-                } else { // Normal particle
-                    onInfinityPath = true;
-                }
-
+                } else { onInfinityPath = true; }
                 if (onInfinityPath) {
-                    const oldPathPosition = p.pathPosition;
-                    p.speed += p.acceleration * delta;
-                    p.pathPosition = (p.pathPosition + p.speed * delta) % 1;
+                    const oldPathPosition = p.pathPosition; p.speed += p.acceleration * delta; p.pathPosition = (p.pathPosition + p.speed * delta) % 1;
                     if (p.pathPosition < oldPathPosition) p.laps++;
-
-                    if (p.type === 'oscillator' && !p.parent && p.laps >= 2) {
-                        p.markedForRemoval = true;
-                    }
-
+                    if (p.type === 'oscillator' && !p.parent && p.laps >= 2) p.markedForRemoval = true;
                     let basePoint = curve.getPointAt(p.pathPosition);
-                    let wobbleOffset = new THREE.Vector3(
-                        p.wobbleAmplitude.x * Math.sin(elapsedTime * p.wobbleFrequency.x + p.wobblePhase.x),
-                        p.wobbleAmplitude.y * Math.cos(elapsedTime * p.wobbleFrequency.y + p.wobblePhase.y),
-                        p.wobbleAmplitude.z * Math.sin(elapsedTime * p.wobbleFrequency.z + p.wobblePhase.z)
-                    );
+                    let wobbleOffset = new THREE.Vector3( p.wobbleAmplitude.x * Math.sin(elapsedTime * p.wobbleFrequency.x + p.wobblePhase.x), p.wobbleAmplitude.y * Math.cos(elapsedTime * p.wobbleFrequency.y + p.wobblePhase.y), p.wobbleAmplitude.z * Math.sin(elapsedTime * p.wobbleFrequency.z + p.wobblePhase.z) );
                     p.mesh.position.copy(basePoint.add(wobbleOffset));
                 }
-
-                if (p.markedForRemoval) {
-                    if (p.type === 'oscillator' && p.parent) { p.parent.isOrbited = false; }
-                    scene.remove(p.mesh);
-                    particles.splice(i, 1);
-                }
+                if (p.markedForRemoval) { if (p.type === 'oscillator' && p.parent) { p.parent.isOrbited = false; } if(p.trailLine) { /* Trail is now handled by ghostTrails */ } scene.remove(p.mesh); particles.splice(i, 1); }
             }
 
-            // --- COLLISION LOGIC ---
             const centerThreshold = 2.0;
             for (let i = 0; i < particles.length; i++) {
                 for (let j = i + 1; j < particles.length; j++) {
-                    const p1 = particles[i];
-                    const p2 = particles[j];
-
+                    const p1 = particles[i]; const p2 = particles[j];
                     if (!p1 || !p2 || p1.type !== 'normal' || p2.type !== 'normal' || p1.markedForRemoval || p2.markedForRemoval) continue;
-
-                    const dist = p1.mesh.position.distanceTo(p2.mesh.position);
-                    const collisionDistance = p1.mesh.geometry.parameters.radius + p2.mesh.geometry.parameters.radius;
-
+                    const dist = p1.mesh.position.distanceTo(p2.mesh.position); const collisionDistance = p1.mesh.geometry.parameters.radius + p2.mesh.geometry.parameters.radius;
                     if (dist < collisionDistance) {
                         const collisionPoint = p1.mesh.position.clone().add(p2.mesh.position).multiplyScalar(0.5);
                         if (collisionPoint.length() < centerThreshold) {
-                            const v1 = curve.getPointAt((p1.pathPosition + 0.01) % 1).sub(p1.mesh.position);
-                            const v2 = curve.getPointAt((p2.pathPosition + 0.01) % 1).sub(p2.mesh.position);
-
+                            const v1 = curve.getPointAt((p1.pathPosition + 0.01) % 1).sub(p1.mesh.position); const v2 = curve.getPointAt((p2.pathPosition + 0.01) % 1).sub(p2.mesh.position);
                             if (v1.dot(v2) < 0) {
-                                if (p1.isOrbited && p2.isOrbited) {
-                                    createExplosion(collisionPoint, collisionDistance, new THREE.Color(0x00BFFF));
-                                    createParticle('normal', { pathPosition: p1.pathPosition });
-                                    createParticle('fibonacci', { center: collisionPoint });
-                                    createParticle('fibonacci', { center: collisionPoint });
+                                if (p1.isOrbited && p2.isOrbited) { createExplosion(collisionPoint, collisionDistance, new THREE.Color(0x00BFFF)); createParticle('normal', { pathPosition: p1.pathPosition }); createParticle('fibonacci', { center: collisionPoint }); createParticle('fibonacci', { center: collisionPoint });
                                 } else {
-                                    createExplosion(collisionPoint, collisionDistance);
-                                    const newOscillator = createParticle('oscillator', {
-                                        radius: collisionDistance / 2, color: new THREE.Color(0xffffff),
-                                        pathPosition: p1.pathPosition, speed: (p1.speed + p2.speed) / 2
-                                    });
+                                    createExplosion(collisionPoint, collisionDistance); const newOscillator = createParticle('oscillator', { radius: collisionDistance / 2, color: new THREE.Color(0xffffff), pathPosition: p1.pathPosition, speed: (p1.speed + p2.speed) / 2 });
                                     const availableParents = particles.filter(p => p.type === 'normal' && !p.isOrbited && p !== p1 && p !== p2);
-                                    if (availableParents.length > 0) {
-                                        const parent = availableParents[Math.floor(Math.random() * availableParents.length)];
-                                        newOscillator.parent = parent;
-                                        parent.isOrbited = true;
-                                    } else { newOscillator.markedForRemoval = true; }
-                                    createParticle('fibonacci', { center: collisionPoint });
-                                    createParticle('fibonacci', { center: collisionPoint });
+                                    if (availableParents.length > 0) { const parent = availableParents[Math.floor(Math.random() * availableParents.length)]; newOscillator.parent = parent; parent.isOrbited = true; } else { newOscillator.markedForRemoval = true; }
+                                    createParticle('fibonacci', { center: collisionPoint }); createParticle('fibonacci', { center: collisionPoint });
                                 }
-                                p1.markedForRemoval = true;
-                                p2.markedForRemoval = true;
-                                break;
+                                p1.markedForRemoval = true; p2.markedForRemoval = true; break;
                             }
                         }
                     }
                 }
             }
 
-            // --- Update Camera ---
             switch(cameraMode) {
                 case 'general': controls.update(); break;
                 case 'chase': case 'street': case 'tail':
                     if (lockedParticle && !lockedParticle.markedForRemoval) {
                         const particlePos = lockedParticle.mesh.position;
-                        if(cameraMode === 'chase'){
-                            const lookAtBase = curve.getPointAt((lockedParticle.pathPosition + 0.01) % 1);
-                            const cameraPos = particlePos.clone().add(new THREE.Vector3(0, 0, 10));
-                            camera.position.lerp(cameraPos, 0.1);
-                            camera.lookAt(lookAtBase);
-                        } else if (cameraMode === 'street') {
-                            const lookAtBase = curve.getPointAt((lockedParticle.pathPosition + 0.01) % 1);
-                            camera.position.copy(particlePos);
-                            camera.lookAt(lookAtBase);
-                        } else { // Tail
-                             const cameraBasePos = curve.getPointAt((lockedParticle.pathPosition - 0.03 + 1) % 1);
-                             cameraBasePos.y += 3;
-                             camera.position.lerp(cameraBasePos, 0.1);
-                             camera.lookAt(particlePos);
-                        }
+                        if(cameraMode === 'chase'){ const lookAtBase = curve.getPointAt((lockedParticle.pathPosition + 0.01) % 1); camera.position.lerp(particlePos.clone().add(new THREE.Vector3(0, 0, 10)), 0.1); camera.lookAt(lookAtBase);
+                        } else if (cameraMode === 'street') { const lookAtBase = curve.getPointAt((lockedParticle.pathPosition + 0.01) % 1); camera.position.copy(particlePos); camera.lookAt(lookAtBase);
+                        } else { const cameraBasePos = curve.getPointAt((lockedParticle.pathPosition - 0.03 + 1) % 1); cameraBasePos.y += 3; camera.position.lerp(cameraBasePos, 0.1); camera.lookAt(particlePos); }
                     } else { resetToGeneralView(); }
                     break;
                 case 'fibonacci':
-                    if(lockedParticle && !lockedParticle.markedForRemoval) {
-                        camera.position.copy(lockedParticle.mesh.position);
-                        camera.lookAt(new THREE.Vector3(0, 0, 0)); // Look back at the origin
-                    } else { resetToGeneralView(); }
+                    if(lockedParticle && !lockedParticle.markedForRemoval) { camera.position.copy(lockedParticle.mesh.position); camera.lookAt(new THREE.Vector3(0, 0, 0)); } else { resetToGeneralView(); }
                     break;
                 case 'fly':
-                    const flySpeed = 0.03;
-                    flyPathPosition = (flyPathPosition + flySpeed * delta) % 1;
-                    const flyBasePos = curve.getPointAt(flyPathPosition);
-                    flyBasePos.y += 25 + Math.sin(elapsedTime * 2) * 3;
-                    const flyLookAtPos = curve.getPointAt((flyPathPosition + 0.02) % 1);
-                    camera.position.lerp(flyBasePos, 0.05);
-                    camera.lookAt(flyLookAtPos);
+                    flyPathPosition = (flyPathPosition + 0.03 * delta) % 1; const flyBasePos = curve.getPointAt(flyPathPosition); flyBasePos.y += 25 + Math.sin(elapsedTime * 2) * 3;
+                    const flyLookAtPos = curve.getPointAt((flyPathPosition + 0.02) % 1); camera.position.lerp(flyBasePos, 0.05); camera.lookAt(flyLookAtPos);
                     break;
             }
-
             composer.render(delta);
         }
-
         init();
     </script>
 </body>
 </html>
-
