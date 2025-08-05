@@ -95,18 +95,17 @@
         #zoomOutBtn {
             background-color: rgba(200, 0, 0, 0.5);
         }
-        /* --- Styles for the Log Panel --- */
         #log-panel {
             position: absolute;
             top: 10px;
             right: 10px;
-            width: 380px;
+            width: 420px;
             height: calc(100vh - 40px);
             background-color: rgba(10, 10, 10, 0.8);
             border: 1px solid #555;
             border-radius: 8px;
             z-index: 100;
-            display: none; /* Initially hidden */
+            display: none;
             flex-direction: column;
             padding: 10px;
             box-sizing: border-box;
@@ -147,7 +146,6 @@
         <div class="control-group">
             <h4>2. Simulation Controls</h4>
             <button id="simulateBtn" disabled>Start Simulation</button>
-            <!-- New Logging Button Added -->
             <button id="logBtn" disabled>Start Logging Path Info</button>
             <label for="speedSlider">Particle Speed: <span id="speedValue">1.0</span></label>
             <input type="range" id="speedSlider" min="0.1" max="5" step="0.1" value="1.0" disabled>
@@ -162,7 +160,6 @@
         </div>
     </div>
     
-    <!-- New Log Panel HTML -->
     <div id="log-panel">
         <h4>Path Data Log</h4>
         <ul id="log-list"></ul>
@@ -193,8 +190,7 @@
         let cameraMode = 'general';
         let clock = new THREE.Clock();
         const trailSegments = [];
-        // New variables for logging
-        let pathData = []; 
+        let pathData = [];
         const logHistory = [];
         const MAX_LOG_HISTORY = 40;
 
@@ -202,6 +198,9 @@
         const fileInput = document.getElementById('fileInput');
         const uploadBtn = document.getElementById('uploadBtn');
         const simulateBtn = document.getElementById('simulateBtn');
+        const logBtn = document.getElementById('logBtn');
+        const logPanel = document.getElementById('log-panel');
+        const logList = document.getElementById('log-list');
         const speedSlider = document.getElementById('speedSlider');
         const speedValue = document.getElementById('speedValue');
         const generate3DBtn = document.getElementById('generate3DBtn');
@@ -211,10 +210,6 @@
         const generalViewBtn = document.getElementById('generalViewBtn');
         const zoomInBtn = document.getElementById('zoomInBtn');
         const zoomOutBtn = document.getElementById('zoomOutBtn');
-        // New UI element references
-        const logBtn = document.getElementById('logBtn');
-        const logPanel = document.getElementById('log-panel');
-        const logList = document.getElementById('log-list');
 
         function init() {
             scene = new THREE.Scene();
@@ -239,7 +234,7 @@
             uploadBtn.addEventListener('click', () => fileInput.click());
             fileInput.addEventListener('change', handleFileSelect);
             simulateBtn.addEventListener('click', toggleSimulation);
-            logBtn.addEventListener('click', toggleLogging); // Added listener
+            logBtn.addEventListener('click', toggleLogging);
             speedSlider.addEventListener('input', (e) => {
                 speedFactor = parseFloat(e.target.value);
                 speedValue.textContent = speedFactor.toFixed(1);
@@ -253,7 +248,6 @@
             zoomOutBtn.addEventListener('click', () => camera.position.multiplyScalar(1.2));
         }
 
-        // New function to handle logging state
         function toggleLogging() {
             isLogging = !isLogging;
             logBtn.textContent = isLogging ? 'Stop Logging Path Info' : 'Start Logging Path Info';
@@ -274,7 +268,7 @@
                     if (particle) scene.remove(particle);
                     if (tubeShell) scene.remove(tubeShell);
                     if (trailSegments.length > 0) clearTrail();
-                    pathData = []; // Clear old data
+                    pathData = [];
                     
                     const pathMesh = gltf.scene.children[0];
                     if (!pathMesh || !pathMesh.isMesh) return;
@@ -282,14 +276,12 @@
                     const positions = pathMesh.geometry.attributes.position;
                     const colors = pathMesh.geometry.attributes.color;
                     const pointsForCurve = [];
-
-                    // Extract data for both visuals and logging
+                    
                     for (let i = 0; i < positions.count; i++) {
                         const point = new THREE.Vector3().fromBufferAttribute(positions, i);
-                        pointsForCurve.push(point); // For visual curve
-                        
+                        pointsForCurve.push(point);
                         let colorData = colors ? new THREE.Color().fromBufferAttribute(colors, i) : null;
-                        pathData.push({ point, color: colorData }); // For logging
+                        pathData.push({ point, color: colorData });
                     }
                     
                     if (pointsForCurve.length < 2) return;
@@ -300,7 +292,7 @@
                     createParticle();
                     
                     simulateBtn.disabled = false;
-                    logBtn.disabled = false; // Enable logging button
+                    logBtn.disabled = false;
                     speedSlider.disabled = false;
                     generate3DBtn.disabled = false;
                     moveWithParticleBtn.disabled = false;
@@ -351,8 +343,7 @@
                         vec3 finalColor = mix(baseColor, glowColor, intensity);
                         gl_FragColor = vec4(finalColor, 1.0);
                     }
-                `,
-                transparent: true
+                `
             });
 
             pathObject = new THREE.Line(geometry, material);
@@ -439,15 +430,28 @@
             trailSegments.length = 0;
         }
 
-        // New logging helper functions
-        function getAtomTypeFromColor(color) {
+        function getStructureTypeFromColor(color) {
             if (!color) return 'N/A';
-            if (color.r > 0.4 && color.g > 0.4 && color.b > 0.4) return 'Carbon (C)';
-            if (color.b > 0.8 && color.r < 0.2) return 'Nitrogen (N)';
-            if (color.r > 0.8 && color.g < 0.2 && color.b < 0.2) return 'Oxygen (O)';
-            if (color.r > 0.8 && color.g > 0.8 && color.b < 0.2) return 'Sulfur (S)';
-            return 'Unknown';
+            const hsl = {};
+            color.getHSL(hsl);
+            if (hsl.s < 0.2 && hsl.l > 0.4) return 'Carbon (C)';
+            if (hsl.h > 0.55 && hsl.h < 0.7 && hsl.s > 0.5) return 'Nitrogen (N)';
+            if ((hsl.h > 0.95 || hsl.h < 0.05) && hsl.s > 0.7) return 'Oxygen (O)';
+            if (hsl.h > 0.13 && hsl.h < 0.18 && hsl.s > 0.7) return 'Sulfur (S)';
+            if (hsl.h > 0.8 && hsl.s > 0.5) return 'Helix (Alpha)';
+            if (hsl.h > 0.4 && hsl.h < 0.55 && hsl.s > 0.5) return 'Sheet (Beta)';
+            return 'Loop/Unknown';
         }
+
+        function formatColorForLog(color) {
+            if (!color) return 'N/A'.padEnd(17);
+            const r = Math.round(color.r * 255);
+            const g = Math.round(color.g * 255);
+            const b = Math.round(color.b * 255);
+            return `[${r.toString().padEnd(3)},${g.toString().padEnd(3)},${b.toString().padEnd(3)}]`.padEnd(17);
+        }
+
+        // --- FIX: Added the missing updateLogDisplay function ---
         function updateLogDisplay() {
             logList.innerHTML = '';
             logHistory.forEach(entry => {
@@ -456,6 +460,7 @@
                 logList.appendChild(li);
             });
         }
+        // --- END FIX ---
 
         function animate() {
             requestAnimationFrame(animate);
@@ -487,14 +492,15 @@
                     pathObject.material.uniforms.particleDirection.value = particleDirection;
                 }
 
-                // New logging logic runs here
                 if (isLogging) {
                     const currentIndex = Math.round(particleProgress * (pathData.length - 1));
                     const currentData = pathData[currentIndex];
                     if (currentData) {
                         const pos = currentData.point;
-                        const atomType = getAtomTypeFromColor(currentData.color);
-                        const logString = `Index: ${currentIndex.toString().padEnd(5)} Type: ${atomType.padEnd(12)} Pos: [${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}]`;
+                        const interpretedType = getStructureTypeFromColor(currentData.color);
+                        const colorString = formatColorForLog(currentData.color);
+
+                        const logString = `Index: ${currentIndex.toString().padEnd(5)} Type: ${interpretedType.padEnd(14)} Color: ${colorString} Pos: [${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}]`;
 
                         if (logHistory.length === 0 || logHistory[0] !== logString) {
                             logHistory.unshift(logString);
@@ -505,7 +511,6 @@
                 }
             }
 
-            // Original camera logic is preserved
             if (cameraMode === 'fly' || cameraMode === 'road') {
                  if (particle && pathCurve) {
                     const lookAheadProgress = particleProgress + (0.02 * particleDirection);
@@ -551,4 +556,4 @@
         init();
     </script>
 </body>
-</html>
+</html>```
