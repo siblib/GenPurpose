@@ -95,6 +95,45 @@
         #zoomOutBtn {
             background-color: rgba(200, 0, 0, 0.5);
         }
+        /* --- Styles for the Log Panel --- */
+        #log-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 380px;
+            height: calc(100vh - 40px);
+            background-color: rgba(10, 10, 10, 0.8);
+            border: 1px solid #555;
+            border-radius: 8px;
+            z-index: 100;
+            display: none; /* Initially hidden */
+            flex-direction: column;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        #log-panel h4 {
+            margin-top: 0;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        #log-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto;
+            flex-grow: 1;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+        }
+        #log-list li {
+            padding: 4px;
+            border-bottom: 1px solid #333;
+            white-space: pre;
+        }
+        #log-list li:first-child {
+            background-color: rgba(0, 255, 255, 0.1);
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -107,8 +146,9 @@
         </div>
         <div class="control-group">
             <h4>2. Simulation Controls</h4>
-            <!-- UI FIX: Changed button text to "Start Simulation" -->
             <button id="simulateBtn" disabled>Start Simulation</button>
+            <!-- New Logging Button Added -->
+            <button id="logBtn" disabled>Start Logging Path Info</button>
             <label for="speedSlider">Particle Speed: <span id="speedValue">1.0</span></label>
             <input type="range" id="speedSlider" min="0.1" max="5" step="0.1" value="1.0" disabled>
         </div>
@@ -121,6 +161,13 @@
             <button id="generalViewBtn" disabled>General Perspective</button>
         </div>
     </div>
+    
+    <!-- New Log Panel HTML -->
+    <div id="log-panel">
+        <h4>Path Data Log</h4>
+        <ul id="log-list"></ul>
+    </div>
+
     <div id="zoom-controls">
         <button id="zoomInBtn" class="zoom-btn">+</button>
         <button id="zoomOutBtn" class="zoom-btn">-</button>
@@ -141,13 +188,15 @@
 
         let scene, camera, renderer, controls;
         let particle, pathCurve, pathObject, tubeShell;
-        let isSimulating = false;
-        let particleProgress = 0;
-        let particleDirection = 1;
-        let speedFactor = 1.0;
+        let isSimulating = false, isLogging = false;
+        let particleProgress = 0, particleDirection = 1, speedFactor = 1.0;
         let cameraMode = 'general';
         let clock = new THREE.Clock();
         const trailSegments = [];
+        // New variables for logging
+        let pathData = []; 
+        const logHistory = [];
+        const MAX_LOG_HISTORY = 40;
 
         const loader = new GLTFLoader();
         const fileInput = document.getElementById('fileInput');
@@ -162,6 +211,10 @@
         const generalViewBtn = document.getElementById('generalViewBtn');
         const zoomInBtn = document.getElementById('zoomInBtn');
         const zoomOutBtn = document.getElementById('zoomOutBtn');
+        // New UI element references
+        const logBtn = document.getElementById('logBtn');
+        const logPanel = document.getElementById('log-panel');
+        const logList = document.getElementById('log-list');
 
         function init() {
             scene = new THREE.Scene();
@@ -186,6 +239,7 @@
             uploadBtn.addEventListener('click', () => fileInput.click());
             fileInput.addEventListener('change', handleFileSelect);
             simulateBtn.addEventListener('click', toggleSimulation);
+            logBtn.addEventListener('click', toggleLogging); // Added listener
             speedSlider.addEventListener('input', (e) => {
                 speedFactor = parseFloat(e.target.value);
                 speedValue.textContent = speedFactor.toFixed(1);
@@ -199,6 +253,17 @@
             zoomOutBtn.addEventListener('click', () => camera.position.multiplyScalar(1.2));
         }
 
+        // New function to handle logging state
+        function toggleLogging() {
+            isLogging = !isLogging;
+            logBtn.textContent = isLogging ? 'Stop Logging Path Info' : 'Start Logging Path Info';
+            logPanel.style.display = isLogging ? 'flex' : 'none';
+            if (!isLogging) {
+                logHistory.length = 0;
+                logList.innerHTML = '';
+            }
+        }
+
         function handleFileSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -209,28 +274,33 @@
                     if (particle) scene.remove(particle);
                     if (tubeShell) scene.remove(tubeShell);
                     if (trailSegments.length > 0) clearTrail();
+                    pathData = []; // Clear old data
                     
                     const pathMesh = gltf.scene.children[0];
-                    if (!pathMesh || !pathMesh.isMesh) {
-                        console.error("No valid mesh found in the GLB file.");
-                        return;
+                    if (!pathMesh || !pathMesh.isMesh) return;
+
+                    const positions = pathMesh.geometry.attributes.position;
+                    const colors = pathMesh.geometry.attributes.color;
+                    const pointsForCurve = [];
+
+                    // Extract data for both visuals and logging
+                    for (let i = 0; i < positions.count; i++) {
+                        const point = new THREE.Vector3().fromBufferAttribute(positions, i);
+                        pointsForCurve.push(point); // For visual curve
+                        
+                        let colorData = colors ? new THREE.Color().fromBufferAttribute(colors, i) : null;
+                        pathData.push({ point, color: colorData }); // For logging
                     }
-                    const points = [];
-                    const positionAttribute = pathMesh.geometry.attributes.position;
-                    for (let i = 0; i < positionAttribute.count; i++) {
-                        points.push(new THREE.Vector3().fromBufferAttribute(positionAttribute, i));
-                    }
-                    if (points.length < 2) {
-                        console.error("Not enough vertices in the mesh to create a path.");
-                        return;
-                    }
-                    pathCurve = new THREE.CatmullRomCurve3(points);
+                    
+                    if (pointsForCurve.length < 2) return;
+
+                    pathCurve = new THREE.CatmullRomCurve3(pointsForCurve);
                     
                     createGlowingPathObject();
-
                     createParticle();
                     
                     simulateBtn.disabled = false;
+                    logBtn.disabled = false; // Enable logging button
                     speedSlider.disabled = false;
                     generate3DBtn.disabled = false;
                     moveWithParticleBtn.disabled = false;
@@ -244,11 +314,8 @@
         function createGlowingPathObject() {
             const points = pathCurve.getPoints(500);
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
-
             const progress = new Float32Array(points.length);
-            for (let i = 0; i < points.length; i++) {
-                progress[i] = i / (points.length - 1);
-            }
+            for (let i = 0; i < points.length; i++) progress[i] = i / (points.length - 1);
             geometry.setAttribute('progress', new THREE.BufferAttribute(progress, 1));
             
             const material = new THREE.ShaderMaterial({
@@ -275,19 +342,12 @@
                     void main() {
                         float glowStart = particleProgress;
                         float glowEnd = particleProgress + (0.15 * particleDirection);
-
-                        if (particleDirection < 0.0) {
-                            float temp = glowStart;
-                            glowStart = glowEnd;
-                            glowEnd = temp;
-                        }
-
+                        if (particleDirection < 0.0) { float temp = glowStart; glowStart = glowEnd; glowEnd = temp; }
                         float intensity = 0.0;
                         if (vProgress >= glowStart && vProgress <= glowEnd) {
                             float dist = abs(vProgress - particleProgress);
                             intensity = 1.0 - smoothstep(0.0, 0.15, dist);
                         }
-                        
                         vec3 finalColor = mix(baseColor, glowColor, intensity);
                         gl_FragColor = vec4(finalColor, 1.0);
                     }
@@ -339,13 +399,11 @@
         function setCameraMode(mode) {
             cameraMode = mode;
             controls.enabled = (mode === 'general' || mode === 'track_rotate');
-
             if (mode === 'general' && pathObject) {
                 const center = new THREE.Vector3();
                 new THREE.Box3().setFromObject(pathObject).getCenter(center);
                 controls.target.copy(center);
             }
-
             generalViewBtn.disabled = (mode === 'general');
             flyInsideBtn.disabled = (mode === 'fly' || tubeShell === null);
             moveWithParticleBtn.disabled = (mode === 'road');
@@ -368,17 +426,10 @@
                 opacity: 1.0,
                 linewidth: 4
             });
-            
             const lastPoint = trailSegments.length > 0 ? trailSegments[trailSegments.length - 1].endPoint : particle.position;
             const trailGeometry = new THREE.BufferGeometry().setFromPoints([lastPoint.clone(), particle.position.clone()]);
             const trailLine = new THREE.Line(trailGeometry, trailMaterial);
-            
-            const segment = {
-                line: trailLine,
-                life: 180.0,
-                endPoint: particle.position.clone()
-            };
-            
+            const segment = { line: trailLine, life: 180.0, endPoint: particle.position.clone() };
             trailSegments.push(segment);
             scene.add(trailLine);
         }
@@ -388,12 +439,29 @@
             trailSegments.length = 0;
         }
 
+        // New logging helper functions
+        function getAtomTypeFromColor(color) {
+            if (!color) return 'N/A';
+            if (color.r > 0.4 && color.g > 0.4 && color.b > 0.4) return 'Carbon (C)';
+            if (color.b > 0.8 && color.r < 0.2) return 'Nitrogen (N)';
+            if (color.r > 0.8 && color.g < 0.2 && color.b < 0.2) return 'Oxygen (O)';
+            if (color.r > 0.8 && color.g > 0.8 && color.b < 0.2) return 'Sulfur (S)';
+            return 'Unknown';
+        }
+        function updateLogDisplay() {
+            logList.innerHTML = '';
+            logHistory.forEach(entry => {
+                const li = document.createElement('li');
+                li.textContent = entry;
+                logList.appendChild(li);
+            });
+        }
+
         function animate() {
             requestAnimationFrame(animate);
             const delta = clock.getDelta();
 
             for (let i = trailSegments.length - 1; i >= 0; i--) {
-                // --- FIX: Added 'const' to declare the 'segment' variable ---
                 const segment = trailSegments[i];
                 segment.life -= delta;
                 if (segment.life <= 0) {
@@ -418,17 +486,33 @@
                     pathObject.material.uniforms.particleProgress.value = particleProgress;
                     pathObject.material.uniforms.particleDirection.value = particleDirection;
                 }
+
+                // New logging logic runs here
+                if (isLogging) {
+                    const currentIndex = Math.round(particleProgress * (pathData.length - 1));
+                    const currentData = pathData[currentIndex];
+                    if (currentData) {
+                        const pos = currentData.point;
+                        const atomType = getAtomTypeFromColor(currentData.color);
+                        const logString = `Index: ${currentIndex.toString().padEnd(5)} Type: ${atomType.padEnd(12)} Pos: [${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}]`;
+
+                        if (logHistory.length === 0 || logHistory[0] !== logString) {
+                            logHistory.unshift(logString);
+                            if (logHistory.length > MAX_LOG_HISTORY) logHistory.pop();
+                            updateLogDisplay();
+                        }
+                    }
+                }
             }
 
+            // Original camera logic is preserved
             if (cameraMode === 'fly' || cameraMode === 'road') {
                  if (particle && pathCurve) {
                     const lookAheadProgress = particleProgress + (0.02 * particleDirection);
                     const lookAtPoint = pathCurve.getPointAt(Math.max(0, Math.min(1, lookAheadProgress)));
-
                     if (lookAtPoint) {
                         lookAtPoint.add(pathObject.position);
                         let cameraPosition = new THREE.Vector3();
-
                         if (cameraMode === 'fly') {
                             const tangent = pathCurve.getTangentAt(particleProgress).normalize();
                             const offset = tangent.multiplyScalar(-8).add(new THREE.Vector3(0, 2, 0));
@@ -439,7 +523,6 @@
                             cameraBasePos.add(pathObject.position);
                             cameraPosition.copy(cameraBasePos).add(new THREE.Vector3(0, 1.5, 0));
                         }
-                        
                         camera.position.lerp(cameraPosition, 0.1);
                         camera.lookAt(lookAtPoint);
                     }
@@ -450,11 +533,7 @@
                     const lookAheadProgress = Math.min(1, particleProgress + 0.1);
                     const tangent = pathCurve.getTangentAt(lookAheadProgress).normalize();
                     const sideVector = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
-                    
-                    if (sideVector.length() < 0.5) {
-                        sideVector.set(1, 0, 0); 
-                    }
-
+                    if (sideVector.length() < 0.5) sideVector.set(1, 0, 0); 
                     const distance = camera.position.distanceTo(lookAtTarget);
                     const offset = sideVector.multiplyScalar(distance);
                     const desiredPosition = new THREE.Vector3().addVectors(lookAtTarget, offset);
