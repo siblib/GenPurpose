@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Three.js - Refined Particle Effects</title>
+    <title>Three.js - Complete Particle Lifecycle</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
     <style>
@@ -77,7 +77,7 @@
         <div id="settings-panel">
             <h4>Simulation Settings</h4>
             <label for="particleCountInput">Number of Particles:</label>
-            <input type="number" id="particleCountInput" value="80" min="1" max="500">
+            <input type="number" id="particleCountInput" value="32" min="1" max="500">
 
             <label for="speedFactorInput">Initial Speed Factor:</label>
             <input type="range" id="speedFactorInput" value="1" min="0.1" max="5" step="0.1">
@@ -193,7 +193,7 @@
             const accelerationFactor = parseFloat(document.getElementById('accelerationFactorInput').value) || 1.0;
             const particle = { type, markedForRemoval: false, mesh: null, timeAlive: 0 };
             
-            const hasTrail = ['fibonacci', 'sine', 'celestial', 'inward_fibonacci'].includes(type);
+            const hasTrail = ['fibonacci', 'sine', 'celestial', 'inward_fibonacci', 'vertical_sinusoidal'].includes(type);
 
             if (type === 'fibonacci') {
                 const color = new THREE.Color(Math.random() * 0xffffff);
@@ -219,13 +219,22 @@
                 else if (curveType === 'lissajous') curve = new LissajousCurve(20, Math.floor(Math.random() * 3) + 1, Math.floor(Math.random() * 4) + 1);
                 else if (curveType === 'butterfly') curve = new ButterflyCurve(4);
                 else curve = new MaurerRoseCurve(15, Math.floor(Math.random() * 5) + 2, Math.floor(Math.random() * 20) + 70);
-                const life = 20 + Math.random() * 10;
-                Object.assign(particle, { mesh, life: life, initialLife: life, origin: options.origin.clone(), color: options.color, curve: curve, pathProgress: 0, pathSpeed: 0.05 + Math.random() * 0.05, rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2) });
+                const life = 60; // MODIFIED: Set life to 60 seconds
+                Object.assign(particle, { mesh, life: life, initialLife: life, origin: options.origin.clone(), color: options.color, curve: curve, pathProgress: 0, pathSpeed: 0.02 + Math.random() * 0.02, rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection(), Math.random() * Math.PI * 2) }); // MODIFIED: Reduced pathSpeed
             } else if (type === 'inward_fibonacci') {
                 geometry = new THREE.SphereGeometry(0.5, 16, 16);
                 material = new THREE.MeshBasicMaterial({ color: options.color, transparent: true });
                 mesh = new THREE.Mesh(geometry, material);
                 Object.assign(particle, { mesh, life: 15, initialLife: 15, color: options.color, spiralCenter: options.origin.clone(), spiralAngle: Math.atan2(options.origin.y, options.origin.x), spiralRate: 3 + Math.random() * 3, spiralDirection: -1, rotationMatrix: new THREE.Matrix4().makeRotationAxis(new THREE.Vector3().randomDirection().setZ(0).normalize(), Math.random() * Math.PI * 0.2 - 0.1) });
+            } else if (type === 'vertical_sinusoidal') { 
+                geometry = new THREE.SphereGeometry(0.2, 16, 16); 
+                material = new THREE.MeshBasicMaterial({ color: options.color, transparent: true });
+                mesh = new THREE.Mesh(geometry, material);
+                const tiltAngle = (Math.random() - 0.5) * (30 * Math.PI / 180); 
+                const rotationAxis = Math.random() > 0.5 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+                const direction = options.direction.clone().applyAxisAngle(rotationAxis, tiltAngle);
+                const life = 240; 
+                Object.assign(particle, { mesh, life: life, initialLife: life, direction: direction, speed: 8 + Math.random() * 4, sineAmplitude: 0.5 + Math.random() * 1, sineFrequency: 1 + Math.random() * 2, origin: new THREE.Vector3(0,0,0), color: options.color });
             } else {
                 const radius = options.radius || Math.random() * 0.5 + 0.25;
                 const color = options.color || new THREE.Color().setHSL(Math.random(), 1.0, 0.5);
@@ -346,7 +355,7 @@
                         const orbitPos = new THREE.Vector3(Math.cos(p.orbitalAngle) * p.orbitalRadius, Math.sin(p.orbitalAngle) * p.orbitalRadius, Math.sin(p.orbitalAngle * p.wobbleFrequency.z) * p.orbitalRadius * 0.5);
                         p.mesh.position.copy(p.parent.mesh.position).add(orbitPos);
                     } else { if (p.parent) { p.parent.isOrbited = false; p.parent = null; } onInfinityPath = true; }
-                } else if (p.type === 'fibonacci' || p.type === 'sine' || p.type === 'celestial' || p.type === 'inward_fibonacci') {
+                } else if (p.type === 'fibonacci' || p.type === 'sine' || p.type === 'celestial' || p.type === 'inward_fibonacci' || p.type === 'vertical_sinusoidal') {
                     p.life -= delta;
                     if (p.life <= 0) {
                         let trailLife = 0;
@@ -357,11 +366,15 @@
                             trailLife = 5; createShockwave(p.mesh.position, p.color);
                             for (let k = 0; k < 4; k++) createParticle('celestial', { origin: p.mesh.position, color: p.color });
                         } else if (p.type === 'celestial') {
-                            trailLife = 180; createShockwave(p.mesh.position, p.color, true);
+                            trailLife = 180; // MODIFIED: Set trail life to 3 minutes
+                            createShockwave(p.mesh.position, p.color, true);
                             createParticle('inward_fibonacci', { origin: p.mesh.position, color: p.color });
                         } else if (p.type === 'inward_fibonacci') {
-                            trailLife = 0.25; // Quick fade for the final trail
-                            createShockwave(new THREE.Vector3(0,0,0), p.color, true);
+                            trailLife = 0.25; createShockwave(new THREE.Vector3(0,0,0), p.color, true);
+                            for(let k=0; k<2; k++) createParticle('vertical_sinusoidal', { color: p.color, direction: new THREE.Vector3(0,1,0) });
+                            for(let k=0; k<2; k++) createParticle('vertical_sinusoidal', { color: p.color, direction: new THREE.Vector3(0,-1,0) });
+                        } else if (p.type === 'vertical_sinusoidal') {
+                             trailLife = 10;
                         }
                         if (p.trailLine) {
                             ghostTrails.push({ line: p.trailLine, life: trailLife, initialLife: trailLife });
@@ -379,7 +392,7 @@
                         } else if (p.type === 'celestial') {
                             p.pathProgress = (p.pathProgress + delta * p.pathSpeed) % 1; const point = p.curve.getPointAt(p.pathProgress);
                             point.applyMatrix4(p.rotationMatrix); p.mesh.position.copy(p.origin).add(point);
-                            p.mesh.material.opacity = (p.life / p.initialLife) * 0.3; // REDUCED BRIGHTNESS
+                            p.mesh.material.opacity = (p.life / p.initialLife) * 0.3;
                         } else if (p.type === 'inward_fibonacci') {
                             const progress = 1 - (p.life / p.initialLife);
                             const scaleFactor = 1 - Math.pow(progress, 3); 
@@ -387,17 +400,19 @@
                             const radius = (p.life / p.initialLife) * (p.spiralCenter.length() * 0.5);
                             const point = new THREE.Vector3(radius * Math.cos(p.spiralAngle), radius * Math.sin(p.spiralAngle), 0);
                              p.mesh.position.copy(p.spiralCenter.clone().multiplyScalar(scaleFactor)).add(point);
+                        } else if (p.type === 'vertical_sinusoidal') {
+                            const basePos = p.origin.clone().add(p.direction.clone().multiplyScalar(p.timeAlive * p.speed));
+                            const perpendicular = new THREE.Vector3().crossVectors(p.direction, new THREE.Vector3(0, 0, 1)).normalize();
+                            const sineOffset = Math.sin(p.timeAlive * p.sineFrequency) * p.sineAmplitude;
+                            p.mesh.position.copy(basePos.add(perpendicular.multiplyScalar(sineOffset)));
                         }
                         
                         if (p.trailLine) {
                             p.trailPoints.push(p.mesh.position.clone());
-                            // *** NEW: Short, fixed-length trail for inward_fibonacci ***
-                            const maxTrailLength = p.type === 'inward_fibonacci' ? 30 : 200;
+                            const maxTrailLength = p.type === 'inward_fibonacci' ? 30 : (p.type === 'vertical_sinusoidal' ? 80 : 200);
                             if (p.trailPoints.length > maxTrailLength) p.trailPoints.shift();
-                            
                             p.trailLine.geometry.setFromPoints(p.trailPoints);
-                            // *** NEW: Reduced trail brightness for celestial ***
-                            p.trailLine.material.opacity = (p.type === 'celestial') ? (p.life / p.initialLife) * 0.25 : 0.8;
+                            p.trailLine.material.opacity = (p.type === 'celestial') ? 0.4 : (p.type === 'vertical_sinusoidal' ? 1.0 : 0.8); // MODIFIED: Reduced celestial trail opacity
                         }
                     }
                 } else { onInfinityPath = true; }
